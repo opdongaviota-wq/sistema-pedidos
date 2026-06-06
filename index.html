@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Pedidos">
 <meta name="theme-color" content="#0f2540">
-<title>Sistema de Pedidos</title>
+<title>Sistema de Pedidos v3.1</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -1476,22 +1476,28 @@ function isOnline(){ return navigator.onLine; }
 // ════════════════════════════════════════════════
 async function loadOrders() {
   setSyncDot('loading');
-  // Siempre cargar local primero (respuesta inmediata)
   const local = loadLocalOrders();
-  if(local.length){ orders=local; renderHist(); document.getElementById('hist-count').textContent=orders.length+' pedidos guardados (caché)'; }
 
-  if(OFFLINE || !isOnline() || !sbClient){
-    orders = local;
-    setSyncDot(sbClient?'err':'err');
-    renderHist();
-    document.getElementById('hist-count').textContent = local.length
-      ? local.length+' pedidos (sin conexión)'
-      : '0 pedidos — sin conexión a Supabase';
+  // Mostrar local inmediatamente para no quedarse en "Cargando..."
+  orders = local;
+  renderHist();
+  document.getElementById('hist-count').textContent =
+    local.length ? local.length+' pedidos (caché local)' : '0 pedidos guardados';
+
+  // Si no hay cliente Supabase, quedarse con local
+  if(!sbClient || OFFLINE || !isOnline()){
+    setSyncDot('err');
+    document.getElementById('hist-count').textContent =
+      local.length ? local.length+' pedidos (sin conexión)' : 'Sin conexión — 0 pedidos';
     return;
   }
+
+  // Intentar cargar desde Supabase
   try {
-    const { data, error } = await sbClient.from('pedidos').select('*')
-      .eq('sistema',sistema).order('created_at',{ascending:false});
+    const { data, error } = await Promise.race([
+      sbClient.from('pedidos').select('*').eq('sistema',sistema).order('created_at',{ascending:false}),
+      new Promise((_,reject) => setTimeout(()=>reject(new Error('Timeout')), 8000))
+    ]);
     if(error) throw error;
     orders = (data||[]).map(supaRowToOrder);
     saveLocalOrders(orders);
@@ -1500,11 +1506,13 @@ async function loadOrders() {
     document.getElementById('hist-count').textContent = orders.length+' pedidos guardados';
     await syncPendingQueue();
   } catch(e) {
-    console.error('loadOrders error:', e.message);
+    console.error('loadOrders Supabase error:', e.message);
+    // Quedarse con local
     orders = local;
     setSyncDot('err');
     renderHist();
-    document.getElementById('hist-count').textContent=orders.length+' pedidos (modo sin conexión)';
+    document.getElementById('hist-count').textContent =
+      local.length ? local.length+' pedidos (sin conexión a nube)' : 'Error al cargar — sin datos locales';
   }
 }
 

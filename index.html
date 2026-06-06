@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -1204,22 +1203,33 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.querySelector(`[data-sys="${saved.sis}"]`)?.classList.add('sel');
     showLoading('Reconectando…');
     try {
-      await loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js');
-      const createClient = (window.supabase && window.supabase.createClient)
-        ? window.supabase.createClient
-        : window.supabaseJs?.createClient;
+      // SDK ya cargado en <head> — usar directamente
+      const createClient = window.supabase?.createClient;
       if(!createClient) throw new Error('SDK no disponible');
       sbClient = createClient(saved.url, saved.key);
+      // Test rápido de conexión
       const { error } = await sbClient.from('usuarios').select('id').limit(1);
       if(error) throw error;
-      // Re-guardar en todas las capas para refrescar expiración
       credSave(saved.url, saved.key, saved.sis);
       hideLoading();
       irALogin();
       return;
     } catch(e) {
-      hideLoading();
-      credClear();
+      console.warn('Auto-reconnect failed:', e.message);
+      // Intentar de todas formas con loadScript como fallback
+      try {
+        await loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js');
+        const createClient2 = window.supabase?.createClient;
+        if(!createClient2) throw new Error('SDK no disponible');
+        sbClient = createClient2(saved.url, saved.key);
+        credSave(saved.url, saved.key, saved.sis);
+        hideLoading();
+        irALogin();
+        return;
+      } catch(e2) {
+        hideLoading();
+        credClear();
+      }
     }
   }
   genFolio();
@@ -1468,13 +1478,15 @@ async function loadOrders() {
   setSyncDot('loading');
   // Siempre cargar local primero (respuesta inmediata)
   const local = loadLocalOrders();
-  if(local.length){ orders=local; renderHist(); document.getElementById('hist-count').textContent=orders.length+' pedidos guardados'; }
+  if(local.length){ orders=local; renderHist(); document.getElementById('hist-count').textContent=orders.length+' pedidos guardados (caché)'; }
 
-  if(OFFLINE || !isOnline()){
+  if(OFFLINE || !isOnline() || !sbClient){
     orders = local;
-    setSyncDot('err');
+    setSyncDot(sbClient?'err':'err');
     renderHist();
-    document.getElementById('hist-count').textContent=orders.length+' pedidos (sin conexión)';
+    document.getElementById('hist-count').textContent = local.length
+      ? local.length+' pedidos (sin conexión)'
+      : '0 pedidos — sin conexión a Supabase';
     return;
   }
   try {
@@ -1482,15 +1494,13 @@ async function loadOrders() {
       .eq('sistema',sistema).order('created_at',{ascending:false});
     if(error) throw error;
     orders = (data||[]).map(supaRowToOrder);
-    // Actualizar caché local con datos de la nube
     saveLocalOrders(orders);
     setSyncDot('ok');
     renderHist();
     document.getElementById('hist-count').textContent = orders.length+' pedidos guardados';
-    // Sincronizar pendientes si los hay
     await syncPendingQueue();
   } catch(e) {
-    // Sin conexión — usar caché local
+    console.error('loadOrders error:', e.message);
     orders = local;
     setSyncDot('err');
     renderHist();
@@ -2899,4 +2909,3 @@ async function eliminarUsuario(nombre){
 </script>
 </body>
 </html>
-

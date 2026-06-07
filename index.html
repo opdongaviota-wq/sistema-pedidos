@@ -2646,6 +2646,7 @@ function ocultarFormTransferencia(){
   trOrigen=null; trDestino=null; trSeleccionados={};
   document.getElementById('tr-form-card').style.display='none';
 }
+function setSyncDot(state){const d=document.getElementById('sync-dot');if(d)d.className='sync-dot '+state;}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2800);}
 function showLoading(msg){const l=document.getElementById('loading');l.classList.add('show');document.getElementById('loading-txt').textContent=msg||'Cargando…';}
 function hideLoading(){document.getElementById('loading').classList.remove('show');}

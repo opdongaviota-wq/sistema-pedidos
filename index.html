@@ -788,10 +788,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
 
             <!-- Observaciones y guardar -->
             <div style="margin-top:16px">
-              <div class="mf" style="margin-bottom:12px">
-                <label>Observaciones</label>
-                <input type="text" id="tr-obs" placeholder="Motivo de la transferencia…">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+                <div class="mf">
+                  <label>Fecha de transferencia</label>
+                  <input type="date" id="tr-fecha" style="width:100%;padding:9px 11px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px;font-family:inherit">
+                </div>
+                <div class="mf">
+                  <label>Observaciones</label>
+                  <input type="text" id="tr-obs" placeholder="Motivo de la transferencia…">
+                </div>
               </div>
+              <input type="hidden" id="tr-edit-folio">
               <button class="btn btn-navy" onclick="guardarTransferencia()" id="btn-guardar-tr">🔄 Registrar transferencia</button>
             </div>
           </div>
@@ -2364,6 +2371,7 @@ const SISTEMAS_LIST = [
   {id:'comedores_roble', nombre:'Comedores El Roble', ico:'🍽️'},
   {id:'cocina_barco',    nombre:'Cocina El Barco',    ico:'🍳'},
   {id:'cocina_roble',   nombre:'Cocina El Roble',    ico:'🍳'},
+  {id:'bodega_central', nombre:'Bodega Central',      ico:'📦'},
 ];
 
 let trOrigen = null;
@@ -2481,32 +2489,45 @@ async function guardarTransferencia(){
   const items = Object.values(trSeleccionados);
   if(!items.length){toast('Agrega al menos un producto con cantidad');return;}
 
-  const folio = 'TR-'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'-'+String(Math.floor(Math.random()*900)+100);
+  const editFolio = document.getElementById('tr-edit-folio').value;
+  const fechaInput = document.getElementById('tr-fecha').value;
+  const fecha = fechaInput || new Date().toISOString().slice(0,10);
+  const folio = editFolio || 'TR-'+fecha.replace(/-/g,'')+'-'+String(Math.floor(Math.random()*900)+100);
+
   const row = {
     folio, origen:trOrigen, destino:trDestino,
     estado:'confirmado', items,
     autorizado_por: session?.name||'Supervisor',
     obs: document.getElementById('tr-obs').value||'',
-    created_at: new Date().toISOString(),
+    created_at: fecha+'T12:00:00.000Z',
     updated_at: new Date().toISOString(),
   };
 
-  showLoading('Registrando transferencia…');
+  showLoading(editFolio ? 'Actualizando transferencia…' : 'Registrando transferencia…');
   try {
     if(!OFFLINE && sbClient){
-      const {error} = await sbClient.from('transferencias').insert(row);
-      if(error) throw error;
-
-      // Actualizar inventario bodega origen (descuenta) y destino (suma)
-      await actualizarInventarioTr(trOrigen, items, -1);
-      await actualizarInventarioTr(trDestino, items, +1);
+      if(editFolio){
+        // Modo edición — actualizar registro existente
+        const {error} = await sbClient.from('transferencias').update({
+          origen:row.origen, destino:row.destino, items:row.items,
+          autorizado_por:row.autorizado_por, obs:row.obs,
+          created_at:row.created_at, updated_at:row.updated_at,
+        }).eq('folio',folio);
+        if(error) throw error;
+      } else {
+        const {error} = await sbClient.from('transferencias').insert(row);
+        if(error) throw error;
+        await actualizarInventarioTr(trOrigen, items, -1);
+        await actualizarInventarioTr(trDestino, items, +1);
+      }
     }
-    // Guardar local
-    transferencias.unshift(row);
+    // Actualizar local
+    const idx = transferencias.findIndex(t=>t.folio===folio);
+    if(idx>=0) transferencias[idx]=row; else transferencias.unshift(row);
     localStorage.setItem('transferencias_local', JSON.stringify(transferencias.slice(0,200)));
 
     hideLoading();
-    toast('✅ Transferencia '+folio+' registrada — inventario actualizado');
+    toast(editFolio ? '✅ Transferencia actualizada — '+folio : '✅ Transferencia '+folio+' registrada');
     ocultarFormTransferencia();
     renderHistTr();
   } catch(e){
@@ -2576,7 +2597,8 @@ function renderHistTr(){
     <td>
       <div class="btn-row">
         <button class="btn btn-ghost btn-sm" onclick="verDetalleTransferencia(${i})">👁️ Ver</button>
-        ${tr.estado!=='cancelado'?`<button class="btn btn-danger btn-sm" onclick="cancelarTransferencia('${tr.folio}')">✕</button>`:''}
+        <button class="btn btn-ghost btn-sm" style="color:var(--sol);border-color:var(--solbr)" onclick="editarTransferencia(${i})">✏️ Editar</button>
+        <button class="btn btn-danger btn-sm" onclick="eliminarTransferencia('${tr.folio}')">🗑️</button>
       </div>
     </td>
   </tr>`).join('');
@@ -2619,6 +2641,50 @@ function verDetalleTransferencia(idx){
   win.document.close();
 }
 
+function editarTransferencia(idx){
+  const tr = transferencias[idx];
+  if(!tr) return;
+  // Cargar datos en el formulario
+  trOrigen = tr.origen;
+  trDestino = tr.destino;
+  trSeleccionados = {};
+  (tr.items||[]).forEach(it=>{
+    const key = it.name;
+    trSeleccionados[key] = {name:it.name, cat:it.cat, unit:it.unit, cantidad:it.cantidad};
+  });
+  document.getElementById('tr-form-card').style.display='block';
+  document.getElementById('tr-productos-section').style.display='block';
+  document.getElementById('tr-obs').value = tr.obs||'';
+  document.getElementById('tr-fecha').value = tr.created_at?.slice(0,10)||new Date().toISOString().slice(0,10);
+  document.getElementById('tr-edit-folio').value = tr.folio;
+  document.getElementById('btn-guardar-tr').textContent = '💾 Guardar cambios';
+  document.getElementById('tr-ruta-label').innerHTML =
+    `<span style="color:var(--sol);font-weight:700">${getNombreSistema(tr.origen)}</span>
+     <span style="margin:0 6px">→</span>
+     <span style="color:var(--rec);font-weight:700">${getNombreSistema(tr.destino)}</span>`;
+  renderLocalesGrid();
+  renderProdsTr('');
+  updSelResumen();
+  document.getElementById('tr-form-card').scrollIntoView({behavior:'smooth'});
+  toast('Editando transferencia '+tr.folio);
+}
+
+async function eliminarTransferencia(folio){
+  if(!confirm('¿Eliminar permanentemente la transferencia '+folio+'?\nEsta acción no se puede deshacer.')) return;
+  showLoading('Eliminando…');
+  try {
+    if(!OFFLINE && sbClient){
+      const {error} = await sbClient.from('transferencias').delete().eq('folio',folio);
+      if(error) throw error;
+    }
+    transferencias = transferencias.filter(t=>t.folio!==folio);
+    localStorage.setItem('transferencias_local', JSON.stringify(transferencias.slice(0,200)));
+    hideLoading();
+    renderHistTr();
+    toast('🗑️ Transferencia eliminada');
+  } catch(e){ hideLoading(); toast('Error: '+e.message); }
+}
+
 async function cancelarTransferencia(folio){
   if(!confirm('¿Cancelar la transferencia '+folio+'?\nEsto NO revierte el inventario automáticamente.')) return;
   try {
@@ -2638,6 +2704,9 @@ function mostrarFormTransferencia(){
   document.getElementById('tr-form-card').style.display='block';
   document.getElementById('tr-productos-section').style.display='none';
   document.getElementById('tr-obs').value='';
+  document.getElementById('tr-fecha').value=new Date().toISOString().slice(0,10);
+  document.getElementById('tr-edit-folio').value='';
+  document.getElementById('btn-guardar-tr').textContent='🔄 Registrar transferencia';
   renderLocalesGrid();
   document.getElementById('tr-form-card').scrollIntoView({behavior:'smooth'});
 }
@@ -2645,6 +2714,8 @@ function mostrarFormTransferencia(){
 function ocultarFormTransferencia(){
   trOrigen=null; trDestino=null; trSeleccionados={};
   document.getElementById('tr-form-card').style.display='none';
+  document.getElementById('tr-edit-folio').value='';
+  document.getElementById('btn-guardar-tr').textContent='🔄 Registrar transferencia';
 }
 function setSyncDot(state){const d=document.getElementById('sync-dot');if(d)d.className='sync-dot '+state;}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2800);}

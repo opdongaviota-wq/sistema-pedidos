@@ -2398,7 +2398,7 @@ function renderLocalesGrid(){
       <div><div class="tr-local-name">${s.nombre}</div>
       <div class="tr-local-sub">${tipo==='origen'?'Sale de aquí':'Llega aquí'}</div></div>
     </button>`;
-  origenGrid.innerHTML  = SISTEMAS_LIST.map(s=>makeBtn(s,'origen')).join('');
+  origenGrid.innerHTML  = SISTEMAS_LIST.filter(s=>s.id!=='bodega_central').map(s=>makeBtn(s,'origen')).join('');
   destinoGrid.innerHTML = SISTEMAS_LIST.map(s=>makeBtn(s,'destino')).join('');
 }
 

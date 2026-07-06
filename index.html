@@ -1876,16 +1876,16 @@ function imprimirPedido(o) {
   const genFilas = (entries) => {
     let html = '';
     entries.forEach(([cat,items])=>{
-      html += `<tr><td colspan="5" style="background:#f0eeec;font-size:7pt;font-weight:700;color:#5f5c55;text-transform:uppercase;letter-spacing:.06em;padding:1.2mm 1.5mm;border-bottom:.5px solid #d4d1cb">${cat}</td></tr>`;
+      html += `<tr><td colspan="5" style="background:#f0eeec;font-size:8pt;font-weight:700;color:#5f5c55;text-transform:uppercase;letter-spacing:.06em;padding:1.5mm 1.5mm;border-bottom:.5px solid #d4d1cb">${cat}</td></tr>`;
       items.forEach(it=>{
         const estIco = it.status==='completo'?'✅':it.status==='parcial'?'⚠️':it.status==='pendiente_entrega'?'⏳':'·';
         const bgRow = it.status==='completo'?'#f5fbf7':it.status==='parcial'?'#fffbf2':it.status==='pendiente_entrega'?'#f0f5ff':'white';
         html += `<tr style="border-bottom:.3px solid #eeecea;background:${bgRow}">
-          <td style="padding:1.2mm 1.5mm;font-size:8pt;max-width:55mm;overflow:hidden">${it.name}</td>
-          <td style="text-align:center;font-size:7pt;color:#9e9b94;padding:1.2mm 1mm;white-space:nowrap">${it.unit||''}</td>
-          <td style="text-align:center;background:#d6eaff;font-weight:800;font-family:monospace;font-size:9pt;color:#0a3d6b;padding:1.2mm 1.5mm">${it.asked||0}</td>
-          <td style="text-align:center;background:#ffe8b0;font-weight:800;font-family:monospace;font-size:9pt;color:#5a3300;padding:1.2mm 1.5mm">${it.delivered||0}</td>
-          <td style="text-align:center;font-size:8pt;padding:1.2mm 1mm">${estIco}</td>
+          <td style="padding:1.5mm 1.5mm;font-size:9.5pt;max-width:55mm;overflow:hidden">${it.name}</td>
+          <td style="text-align:center;font-size:8pt;color:#9e9b94;padding:1.5mm 1mm;white-space:nowrap">${it.unit||''}</td>
+          <td style="text-align:center;background:#d6eaff;font-weight:800;font-family:monospace;font-size:10.5pt;color:#0a3d6b;padding:1.5mm 1.5mm">${it.asked||0}</td>
+          <td style="text-align:center;background:#ffe8b0;font-weight:800;font-family:monospace;font-size:10.5pt;color:#5a3300;padding:1.5mm 1.5mm">${it.delivered||0}</td>
+          <td style="text-align:center;font-size:9pt;padding:1.5mm 1mm">${estIco}</td>
         </tr>`;
       });
     });
@@ -1903,11 +1903,11 @@ function imprimirPedido(o) {
 
   // Header de tabla (compacto)
   const tblHeader = `<thead><tr>
-    <th style="text-align:left;padding:1.5mm 1.5mm;border-bottom:1px solid #0f2540;font-size:7pt;color:#0f2540;width:42%">Producto</th>
-    <th style="padding:1.5mm 1mm;border-bottom:1px solid #0f2540;font-size:7pt;color:#9e9b94;width:9%;text-align:center">Unid.</th>
-    <th style="padding:1.5mm 1mm;border-bottom:1px solid #0f2540;font-size:7pt;color:#1a5fa5;background:#e8f1fb;width:14%;text-align:center">Pedida</th>
-    <th style="padding:1.5mm 1mm;border-bottom:1px solid #0f2540;font-size:7pt;color:#854f0b;background:#fff3dc;width:14%;text-align:center">Entregada</th>
-    <th style="padding:1.5mm 1mm;border-bottom:1px solid #0f2540;font-size:7pt;color:#0f2540;width:10%;text-align:center">Est.</th>
+    <th style="text-align:left;padding:1.5mm 1.5mm;border-bottom:1px solid #0f2540;font-size:8.5pt;color:#0f2540;width:42%">Producto</th>
+    <th style="padding:1.5mm 1mm;border-bottom:1px solid #0f2540;font-size:8pt;color:#9e9b94;width:9%;text-align:center">Unid.</th>
+    <th style="padding:1.5mm 1mm;border-bottom:1px solid #0f2540;font-size:8pt;color:#1a5fa5;background:#e8f1fb;width:14%;text-align:center">Pedida</th>
+    <th style="padding:1.5mm 1mm;border-bottom:1px solid #0f2540;font-size:8pt;color:#854f0b;background:#fff3dc;width:14%;text-align:center">Entregada</th>
+    <th style="padding:1.5mm 1mm;border-bottom:1px solid #0f2540;font-size:8pt;color:#0f2540;width:10%;text-align:center">Est.</th>
   </tr></thead>`;
 
   // Firmas compactas
@@ -1919,10 +1919,10 @@ function imprimirPedido(o) {
   ];
   const firmasHTML = cfRows.map(f=>`
     <td style="border:1px solid #d4d1cb;border-radius:4px;padding:1.5mm;vertical-align:top;width:25%">
-      <div style="font-size:5.5pt;font-weight:700;background:${f.bg};color:${f.cls};padding:.8mm 2mm;border-radius:3px;margin-bottom:1mm;display:inline-block">${f.rol}</div>
-      <div style="font-size:6.5pt;font-weight:600;margin-bottom:.5mm">${f.d.n||'_____________________'}</div>
-      <div style="font-size:5.5pt;color:#9e9b94;margin-bottom:4mm">${f.d.d?f.d.d.replace('T',' ').slice(0,16):'Fecha: ___/___/______'}</div>
-      <div style="border-top:1px solid #d4d1cb;padding-top:.8mm;font-size:5pt;color:#9e9b94">Firma</div>
+      <div style="font-size:7pt;font-weight:700;background:${f.bg};color:${f.cls};padding:.8mm 2mm;border-radius:3px;margin-bottom:1mm;display:inline-block">${f.rol}</div>
+      <div style="font-size:8pt;font-weight:600;margin-bottom:1mm">${f.d.n||'_____________________'}</div>
+      <div style="font-size:7pt;color:#9e9b94;margin-bottom:5mm">${f.d.d?f.d.d.replace('T',' ').slice(0,16):'Fecha: ___/___/______'}</div>
+      <div style="border-top:1px solid #d4d1cb;padding-top:.8mm;font-size:6.5pt;color:#9e9b94">Firma</div>
     </td>`).join('');
 
   const html = `<!DOCTYPE html>
@@ -1943,9 +1943,9 @@ function imprimirPedido(o) {
       overflow:hidden;
     }
     #contenido{
-      transform:scale(0.68);
+      transform:scale(0.75);
       transform-origin:top left;
-      width:147.05%;
+      width:133.33%;
       padding:8mm 10mm;
     }
   }
@@ -1982,11 +1982,11 @@ function imprimirPedido(o) {
   <div style="display:flex;gap:3mm;margin-bottom:2mm;align-items:stretch">
     <!-- Meta datos -->
     <div style="flex:2;background:#f8f7f4;border-radius:4px;padding:2mm;display:grid;grid-template-columns:1fr 1fr;gap:1mm 5mm">
-      <div><span style="font-size:5.5pt;font-weight:700;color:#9e9b94;text-transform:uppercase">Fecha pedido</span><br><span style="font-size:7pt;font-weight:600">${o.fecha||'—'}</span></div>
-      <div><span style="font-size:5.5pt;font-weight:700;color:#9e9b94;text-transform:uppercase">Fecha entrega</span><br><span style="font-size:7pt;font-weight:600">${o.fechaEntrega||'—'}</span></div>
-      <div><span style="font-size:5.5pt;font-weight:700;color:#9e9b94;text-transform:uppercase">Solicitante</span><br><span style="font-size:7pt;font-weight:600">${cf.sol?.n||o.savedBy?.name||'—'}</span></div>
-      <div><span style="font-size:5.5pt;font-weight:700;color:#9e9b94;text-transform:uppercase">Bodega Central</span><br><span style="font-size:7pt;font-weight:600">${cf.des?.n||'—'}</span></div>
-      ${o.obs?`<div style="grid-column:1/-1"><span style="font-size:5.5pt;font-weight:700;color:#9e9b94;text-transform:uppercase">Obs.</span><br><span style="font-size:6.5pt">${o.obs}</span></div>`:''}
+      <div><span style="font-size:7pt;font-weight:700;color:#9e9b94;text-transform:uppercase">Fecha pedido</span><br><span style="font-size:7pt;font-weight:600">${o.fecha||'—'}</span></div>
+      <div><span style="font-size:7pt;font-weight:700;color:#9e9b94;text-transform:uppercase">Fecha entrega</span><br><span style="font-size:7pt;font-weight:600">${o.fechaEntrega||'—'}</span></div>
+      <div><span style="font-size:7pt;font-weight:700;color:#9e9b94;text-transform:uppercase">Solicitante</span><br><span style="font-size:7pt;font-weight:600">${cf.sol?.n||o.savedBy?.name||'—'}</span></div>
+      <div><span style="font-size:7pt;font-weight:700;color:#9e9b94;text-transform:uppercase">Bodega Central</span><br><span style="font-size:7pt;font-weight:600">${cf.des?.n||'—'}</span></div>
+      ${o.obs?`<div style="grid-column:1/-1"><span style="font-size:7pt;font-weight:700;color:#9e9b94;text-transform:uppercase">Obs.</span><br><span style="font-size:6.5pt">${o.obs}</span></div>`:''}
     </div>
     <!-- KPIs -->
     <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:1.5mm">

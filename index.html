@@ -336,6 +336,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
 .tp-cancelado{background:var(--erb);color:var(--er);padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;display:inline-block}
 .locales-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 @media(max-width:500px){.locales-grid{grid-template-columns:1fr}}
+/* ── INVENTARIO SUBTABS ── */
+.inv-subtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.inv-subtab{padding:7px 14px;border:1.5px solid var(--g2);border-radius:20px;background:white;font-size:12px;font-weight:700;cursor:pointer;color:var(--g5);font-family:inherit;transition:all .15s}
+.inv-subtab:hover{border-color:var(--g3);background:var(--g1)}
+.inv-subtab.active{background:var(--navy);color:white;border-color:var(--navy)}
+.mov-pill{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;display:inline-block;white-space:nowrap}
+.mov-conteo{background:var(--solb);color:var(--sol)}
+.mov-entrega{background:var(--recb);color:var(--rec)}
+.mov-transfer{background:var(--supb);color:var(--sup)}
+.mov-btn{border:1px solid var(--g2);border-radius:6px;background:white;cursor:pointer;padding:3px 7px;font-size:13px;margin:0 2px}
+.mov-btn:hover{background:var(--g1)}
 </style>
 </head>
 <body>
@@ -610,126 +621,150 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
     <div class="panel" id="panel-inventario">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
         <div>
-          <div class="pt">📦 Inventario de Bodega</div>
-          <div class="ps" id="inv-subtitle">Stock semanal por producto</div>
+          <div class="pt">📦 Inventario del Local</div>
+          <div class="ps" id="inv-subtitle">Conteos diarios, entregas automáticas y reportes</div>
         </div>
-        <div class="btn-row">
-          <span id="inv-semana-badge" style="font-size:12px;font-weight:700;color:var(--navy);background:var(--solb);border:1px solid var(--solbr);padding:4px 12px;border-radius:20px"></span>
-          <button class="btn btn-navy btn-sm" onclick="guardarInventario()">💾 Guardar inventario</button>
-          <button class="btn btn-ghost btn-sm sup-only" style="display:none" onclick="exportarInventarioCSV()">📄 CSV</button>
-        </div>
+        <span id="inv-local-badge" style="font-size:12px;font-weight:700;color:var(--navy);background:var(--solb);border:1px solid var(--solbr);padding:4px 12px;border-radius:20px"></span>
       </div>
 
       <!-- Banner de rol -->
-      <div id="inv-role-banner" class="role-banner" style="margin-bottom:16px"></div>
+      <div id="inv-role-banner" class="role-banner" style="margin-bottom:14px"></div>
 
-      <!-- Selector de semana (Supervisor puede ver semanas anteriores) -->
-      <div class="card" style="margin-bottom:14px">
-        <div class="card-body" style="padding:14px 18px">
-          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-            <div class="mf" style="margin:0;flex:1;min-width:180px">
-              <label>Semana de registro</label>
-              <input type="week" id="inv-semana" style="width:100%;padding:8px 11px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px;font-family:inherit" onchange="cargarInventarioSemana()">
-            </div>
-            <div id="inv-estado-badge" style="font-size:12px;margin-top:16px"></div>
-          </div>
-        </div>
+      <!-- Sub-pestañas -->
+      <div class="inv-subtabs">
+        <button class="inv-subtab active" data-invtab="stock" onclick="switchInvTab('stock')">📦 Stock actual</button>
+        <button class="inv-subtab" data-invtab="conteo" id="inv-tab-conteo" onclick="switchInvTab('conteo')">📆 Conteo diario</button>
+        <button class="inv-subtab" data-invtab="movs" onclick="switchInvTab('movs')">📜 Movimientos</button>
+        <button class="inv-subtab" data-invtab="reporte" onclick="switchInvTab('reporte')">📊 Reporte</button>
       </div>
 
-      <!-- Vista Supervisor: ambas bodegas lado a lado -->
-      <div id="inv-sup-view" style="display:none">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
-          <div class="card" style="border-top:3px solid var(--sol)">
-            <div class="card-head" style="cursor:default">
-              <span class="card-head-icon">📋</span>
-              <span class="card-head-title" style="color:var(--sol)">Bodega Solicitante</span>
-              <span id="inv-sup-sol-fecha" style="font-size:11px;color:var(--g4)"></span>
-            </div>
-            <div class="card-body" style="padding:0;overflow-x:auto">
-              <table class="dash-table" id="inv-sup-sol-table">
-                <thead><tr><th>Producto</th><th>Unidad</th><th style="text-align:right">Stock</th></tr></thead>
-                <tbody id="inv-sup-sol-body"></tbody>
-              </table>
-            </div>
-          </div>
-          <div class="card" style="border-top:3px solid var(--des)">
-            <div class="card-head" style="cursor:default">
-              <span class="card-head-icon">📦</span>
-              <span class="card-head-title" style="color:var(--des)">Bodega Central</span>
-              <span id="inv-sup-des-fecha" style="font-size:11px;color:var(--g4)"></span>
-            </div>
-            <div class="card-body" style="padding:0;overflow-x:auto">
-              <table class="dash-table" id="inv-sup-des-table">
-                <thead><tr><th>Producto</th><th>Unidad</th><th style="text-align:right">Stock</th></tr></thead>
-                <tbody id="inv-sup-des-body"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <!-- Comparativa consolidada -->
+      <!-- ── SUB: STOCK ACTUAL ── -->
+      <div id="inv-sub-stock">
         <div class="card">
-          <div class="card-head" onclick="toggleCard(this)">
-            <span class="card-head-icon">📊</span>
-            <span class="card-head-title">Comparativa consolidada</span>
-            <span class="card-head-toggle open">▼</span>
+          <div class="card-head" style="cursor:default">
+            <span class="card-head-icon">📦</span>
+            <span class="card-head-title">Stock estimado por producto</span>
+            <span id="inv-stock-info" style="font-size:11px;color:var(--g4)"></span>
           </div>
           <div class="card-body" style="padding:0;overflow-x:auto">
             <table class="dash-table">
               <thead><tr>
                 <th>Producto</th><th>Unidad</th>
-                <th style="text-align:right;color:var(--sol)">Stock Solicitante</th>
-                <th style="text-align:right;color:var(--des)">Stock Bodega</th>
-                <th style="text-align:right">Total</th>
-                <th style="text-align:right">Pedido sem. actual</th>
-                <th>Relación</th>
+                <th style="text-align:right">Último conteo</th>
+                <th>Fecha conteo</th>
+                <th style="text-align:right">± Entradas/Salidas post.</th>
+                <th style="text-align:right">Stock estimado</th>
               </tr></thead>
-              <tbody id="inv-comp-body"></tbody>
+              <tbody id="inv-stock-body"></tbody>
             </table>
           </div>
         </div>
-
-        <!-- Historial de registros -->
-        <div class="card" style="margin-top:14px">
-          <div class="card-head" onclick="toggleCard(this)">
-            <span class="card-head-icon">📅</span>
-            <span class="card-head-title">Historial de inventarios</span>
-            <span class="card-head-toggle open">▼</span>
-          </div>
-          <div class="card-body" style="padding:0;overflow-x:auto">
-            <table class="dash-table">
-              <thead><tr>
-                <th>Semana</th><th>Bodega</th><th>Registrado por</th>
-                <th style="text-align:right">Productos</th><th>Fecha registro</th>
-              </tr></thead>
-              <tbody id="inv-hist-body"></tbody>
-            </table>
-          </div>
+        <div style="margin-top:12px;font-size:12px;color:var(--g4);text-align:center">
+          💡 Stock estimado = último conteo registrado ± entregas de pedidos y transferencias posteriores a ese conteo.
         </div>
       </div>
 
-      <!-- Vista Solicitante / Bodega: solo su bodega -->
-      <div id="inv-rol-view">
-        <div class="card">
-          <div class="card-head" onclick="toggleCard(this)">
-            <span class="card-head-icon" id="inv-rol-icon">📋</span>
-            <span class="card-head-title" id="inv-rol-title">Mi inventario</span>
-            <span class="card-head-toggle open">▼</span>
+      <!-- ── SUB: CONTEO DIARIO ── -->
+      <div id="inv-sub-conteo" style="display:none">
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-body" style="padding:14px 18px">
+            <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap">
+              <div class="mf" style="margin:0;flex:1;min-width:170px">
+                <label>Fecha del conteo</label>
+                <input type="date" id="conteo-fecha" style="width:100%;padding:8px 11px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px;font-family:inherit" onchange="cargarConteoFecha()">
+              </div>
+              <div id="conteo-estado-badge" style="font-size:12px;padding-bottom:6px"></div>
+              <div class="btn-row" style="padding-bottom:2px">
+                <button class="btn btn-navy btn-sm" id="btn-guardar-conteo" onclick="guardarConteo()">💾 Guardar conteo</button>
+                <button class="btn btn-ghost btn-sm" id="btn-cancelar-edicion" style="display:none" onclick="cancelarEdicionMov()">✖ Cancelar edición</button>
+              </div>
+            </div>
+            <div id="conteo-edit-banner" style="display:none;margin-top:10px;font-size:12px;font-weight:600;color:var(--des);background:var(--goldb);border:1px solid var(--desbr);border-radius:8px;padding:8px 12px"></div>
           </div>
+        </div>
+        <div class="card">
           <div class="card-body" style="padding:0;overflow-x:auto">
             <table class="prod-table" style="min-width:400px">
               <thead><tr>
                 <th class="th-nom" style="text-align:left;width:45%">Producto</th>
                 <th style="width:15%">Unidad</th>
-                <th style="width:20%;text-align:center" id="inv-col-header">Stock actual</th>
+                <th style="width:20%;text-align:center">Cantidad</th>
                 <th class="th-obs" style="width:20%">Obs.</th>
               </tr></thead>
-              <tbody id="inv-rol-body"></tbody>
+              <tbody id="conteo-body"></tbody>
             </table>
           </div>
         </div>
         <div style="margin-top:12px;font-size:12px;color:var(--g4);text-align:center">
-          💡 Registra el stock actual de tu bodega cada semana. El Supervisor puede ver ambas bodegas comparadas.
+          💡 Se guarda un conteo por día y por local. Si ya existe uno para la fecha, al guardar se actualiza.
+        </div>
+      </div>
+
+      <!-- ── SUB: MOVIMIENTOS ── -->
+      <div id="inv-sub-movs" style="display:none">
+        <div class="card">
+          <div class="card-head" style="cursor:default">
+            <span class="card-head-icon">📜</span>
+            <span class="card-head-title">Historial de movimientos</span>
+            <span id="invmov-count" style="font-size:11px;color:var(--g4)"></span>
+          </div>
+          <div class="card-body" style="padding:0;overflow-x:auto">
+            <table class="dash-table">
+              <thead><tr>
+                <th>Fecha</th><th>Tipo</th><th>Referencia</th><th>Registrado por</th>
+                <th style="text-align:right">Ítems</th><th style="text-align:center">Acciones</th>
+              </tr></thead>
+              <tbody id="invmov-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div style="margin-top:12px;font-size:12px;color:var(--g4);text-align:center">
+          💡 Toca una fila para ver el detalle de productos. ✏️ edita el movimiento, 🗑️ lo elimina.
+        </div>
+      </div>
+
+      <!-- ── SUB: REPORTE ── -->
+      <div id="inv-sub-reporte" style="display:none">
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-body" style="padding:14px 18px">
+            <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap">
+              <div class="mf" style="margin:0;min-width:150px">
+                <label>Periodo</label>
+                <select id="rep-periodo" style="width:100%;padding:8px 11px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px;font-family:inherit" onchange="renderReporte()">
+                  <option value="diario">Diario</option>
+                  <option value="semanal">Semanal</option>
+                  <option value="quincenal">Quincenal</option>
+                  <option value="mensual" selected>Mensual</option>
+                </select>
+              </div>
+              <div class="mf" style="margin:0;min-width:170px">
+                <label>Fecha de referencia</label>
+                <input type="date" id="rep-fecha" style="width:100%;padding:8px 11px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px;font-family:inherit" onchange="renderReporte()">
+              </div>
+              <span id="rep-rango" style="font-size:12px;font-weight:700;color:var(--navy);background:var(--solb);border:1px solid var(--solbr);padding:4px 12px;border-radius:20px;margin-bottom:4px"></span>
+              <button class="btn btn-ghost btn-sm" style="margin-bottom:2px" onclick="exportarReporteCSV()">📄 CSV</button>
+            </div>
+          </div>
+        </div>
+        <div class="kpi-grid" id="rep-kpis" style="margin-bottom:14px"></div>
+        <div class="card">
+          <div class="card-head" style="cursor:default">
+            <span class="card-head-icon">📊</span>
+            <span class="card-head-title">Movimientos por producto en el periodo</span>
+          </div>
+          <div class="card-body" style="padding:0;overflow-x:auto">
+            <table class="dash-table">
+              <thead><tr>
+                <th>Producto</th><th>Unidad</th>
+                <th style="text-align:right">Σ Entregas</th>
+                <th style="text-align:right">Σ Transf. (±)</th>
+                <th style="text-align:right">N° conteos</th>
+                <th style="text-align:right">Último conteo</th>
+                <th>Fecha último conteo</th>
+              </tr></thead>
+              <tbody id="rep-body"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -1539,9 +1574,15 @@ async function saveForm() {
 
   // 1. Guardar siempre en local primero (instantáneo)
   const idx = orders.findIndex(o=>o.folio===data.folio);
+  const prevEstado = idx>=0 ? orders[idx].estado : null;
   if(idx>=0) orders[idx]=data; else orders.unshift(data);
   saveLocalOrders(orders);
   renderHist();
+
+  // Registro automático en inventario al pasar a "Entregado"
+  if(data.estado==='entregado' && prevEstado!=='entregado'){
+    registrarEntregaInventario(data);
+  }
 
   // 2. Intentar guardar en la nube
   const row = {
@@ -2038,329 +2079,555 @@ function imprimirPedido(o) {
 
 
 // ════════════════════════════════════════════════
-// INVENTARIO DE BODEGA
+// INVENTARIO DEL LOCAL — inventario_movimientos
+// tipo: 'conteo' (registro absoluto diario) | 'entrega' (suma automática al marcar pedido Entregado)
 // ════════════════════════════════════════════════
 
-// Estado local del inventario
-let invData = {}; // { semana: { sol: {producto: {stock, obs, fecha, user}}, des: {...} } }
+let invMovs = [];        // movimientos del sistema actual
+let invEditId = null;    // id del movimiento en edición (null = conteo nuevo/del día)
+let invLoaded = false;
 
-function getSemanaActual(){
-  const now = new Date();
-  const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-  return d.getUTCFullYear() + '-W' + String(weekNo).padStart(2,'0');
+const INVMOV_CACHE = () => 'invmov_' + sistema;
+const INVMOV_PEND  = () => 'invmov_pend_' + sistema;
+
+function invUUID(){
+  return (crypto && crypto.randomUUID) ? crypto.randomUUID()
+    : 'xxxx-xxxx-4xxx-yxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c==='x'?r:(r&0x3|0x8)).toString(16);}) + '-' + Date.now();
+}
+function hoyISO(){
+  const n = new Date();
+  return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
+}
+function fmtFecha(f){
+  if(!f) return '—';
+  const [y,m,d] = f.split('-');
+  return `${d}-${m}-${y}`;
+}
+function invCacheSave(){ try{ localStorage.setItem(INVMOV_CACHE(), JSON.stringify(invMovs)); }catch(e){} }
+function invCacheLoad(){ try{ return JSON.parse(localStorage.getItem(INVMOV_CACHE())||'[]'); }catch(e){ return []; } }
+function invPendGet(){ try{ return JSON.parse(localStorage.getItem(INVMOV_PEND())||'[]'); }catch(e){ return []; } }
+function invPendSave(q){ try{ localStorage.setItem(INVMOV_PEND(), JSON.stringify(q)); }catch(e){} }
+function invPendAdd(op){ const q = invPendGet(); q.push(op); invPendSave(q); }
+
+// ── Permisos ──
+function puedeRegistrarConteo(){ return ['solicitante','supervisor'].includes(session?.role); }
+function puedeEditarMov(m){
+  const r = session?.role;
+  if(r === 'supervisor') return true;
+  if(r === 'solicitante' && m.tipo === 'conteo') return true;
+  return false;
 }
 
-function semanaLabel(semana){
-  // Convertir "2026-W20" a "Semana 20 — 2026"
-  const [year, w] = semana.split('-W');
-  return `Semana ${w} — ${year}`;
-}
-
+// ── Init ──
 async function initInventario(){
-  const semana = getSemanaActual();
-  document.getElementById('inv-semana').value = semana;
-  document.getElementById('inv-semana-badge').textContent = semanaLabel(semana);
-
-  // Mostrar vista según rol
   const role = session?.role;
-  const isSup = role === 'supervisor';
-  document.getElementById('inv-sup-view').style.display = isSup ? 'block' : 'none';
-  document.getElementById('inv-rol-view').style.display = isSup ? 'none' : 'block';
+  document.getElementById('inv-local-badge').textContent = SISTEMAS[sistema]?.nombre || sistema;
 
-  // Banner de rol
+  // Banner por rol
   const banner = document.getElementById('inv-role-banner');
   const msgs = {
-    solicitante: { cls:'rb-sol', ico:'📋', title:'Solicitante', msg:'Registra el stock actual de tu bodega. El Supervisor ve tu inventario comparado con el de Bodega Central.' },
-    despachador: { cls:'rb-des', ico:'📦', title:'Bodega Central', msg:'Registra el stock disponible en Bodega Central. El Supervisor ve la comparativa con el Solicitante.' },
-    supervisor:  { cls:'rb-sup', ico:'🔑', title:'Supervisor', msg:'Vista completa — ves el stock de ambas bodegas, la comparativa y el historial de registros.' },
+    solicitante: { cls:'rb-sol', ico:'📋', title:'Solicitante', msg:'Registra el <strong>conteo diario</strong> de tu local. Las entregas de pedidos se suman automáticamente al inventario.' },
+    despachador: { cls:'rb-des', ico:'📦', title:'Bodega Central', msg:'Vista de consulta — puedes revisar stock, movimientos y reportes del local.' },
+    supervisor:  { cls:'rb-sup', ico:'🔑', title:'Supervisor', msg:'Acceso completo — registra conteos, edita o elimina movimientos y genera reportes por periodo.' },
   };
   const m = msgs[role] || msgs.supervisor;
   banner.className = 'role-banner ' + m.cls;
   banner.innerHTML = `<div class="rb-ico">${m.ico}</div><div><span class="rb-strong">${m.title}</span><span class="rb-text">${m.msg}</span></div>`;
 
-  // Config de columna según rol
-  if(!isSup){
-    const colHeader = document.getElementById('inv-col-header');
-    const rolTitle = document.getElementById('inv-rol-title');
-    const rolIcon = document.getElementById('inv-rol-icon');
-    if(role === 'solicitante'){
-      colHeader.textContent = 'Stock Solicitante';
-      rolTitle.textContent = 'Mi inventario — Bodega Solicitante';
-      rolIcon.textContent = '📋';
-    } else {
-      colHeader.textContent = 'Stock Bodega Central';
-      rolTitle.textContent = 'Mi inventario — Bodega Central';
-      rolIcon.textContent = '📦';
-    }
-  }
+  // Sub-pestaña de conteo solo para quienes pueden registrar
+  document.getElementById('inv-tab-conteo').style.display = puedeRegistrarConteo() ? '' : 'none';
 
-  // Cargar datos
-  await cargarInventarioSemana();
+  // Fechas por defecto
+  document.getElementById('conteo-fecha').value = hoyISO();
+  document.getElementById('rep-fecha').value = hoyISO();
+
+  await cargarMovimientos();
+  switchInvTab('stock');
 }
 
-async function cargarInventarioSemana(){
-  const semana = document.getElementById('inv-semana').value;
-  document.getElementById('inv-semana-badge').textContent = semanaLabel(semana);
+function switchInvTab(n){
+  document.querySelectorAll('.inv-subtab').forEach(b=>b.classList.toggle('active', b.dataset.invtab===n));
+  ['stock','conteo','movs','reporte'].forEach(t=>{
+    const el = document.getElementById('inv-sub-'+t);
+    if(el) el.style.display = t===n ? '' : 'none';
+  });
+  if(n==='stock') renderStockActual();
+  if(n==='conteo'){ if(!invEditId) cargarConteoFecha(); }
+  if(n==='movs') renderMovimientos();
+  if(n==='reporte') renderReporte();
+}
+
+// ── Carga desde Supabase (con caché y cola offline) ──
+async function cargarMovimientos(){
   showLoading('Cargando inventario…');
-
-  // Cargar desde Supabase o local
-  let registros = [];
   if(!OFFLINE && sbClient){
-    try {
-      const { data } = await sbClient.from('inventario')
-        .select('*').eq('sistema', sistema).eq('semana', semana);
-      registros = data || [];
-      // Caché local
-      localStorage.setItem('inv_'+sistema+'_'+semana, JSON.stringify(registros));
-    } catch(e) {
-      // Fallback local
-      registros = JSON.parse(localStorage.getItem('inv_'+sistema+'_'+semana)||'[]');
+    try{
+      await syncPendingInvMovs();
+      const { data, error } = await sbClient.from('inventario_movimientos')
+        .select('*').eq('sistema', sistema)
+        .order('fecha',{ascending:false}).order('created_at',{ascending:false}).limit(1000);
+      if(error) throw error;
+      invMovs = data || [];
+      invCacheSave();
+    }catch(e){
+      console.error('cargarMovimientos:', e.message);
+      invMovs = invCacheLoad();
     }
   } else {
-    registros = JSON.parse(localStorage.getItem('inv_'+sistema+'_'+semana)||'[]');
+    invMovs = invCacheLoad();
   }
-
+  invLoaded = true;
   hideLoading();
-
-  // Organizar por bodega
-  const solData = registros.find(r=>r.bodega==='solicitante');
-  const desData = registros.find(r=>r.bodega==='despachador');
-
-  const role = session?.role;
-  const isSup = role === 'supervisor';
-
-  if(isSup){
-    renderInvSupView(solData, desData, semana);
-    renderInvHistorial();
-  } else {
-    const myData = role === 'solicitante' ? solData : desData;
-    renderInvRolView(myData, role);
-  }
-
-  // Estado del registro
-  const estadoBadge = document.getElementById('inv-estado-badge');
-  const myBodega = role === 'despachador' ? desData : solData;
-  if(myBodega && !isSup){
-    estadoBadge.innerHTML = `<span style="background:var(--okb);color:var(--ok);border:1px solid var(--recbr);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700">✅ Registrado ${new Date(myBodega.updated_at||myBodega.created_at).toLocaleDateString('es-CL')}</span>`;
-  } else if(!isSup) {
-    estadoBadge.innerHTML = `<span style="background:var(--goldb);color:var(--des);border:1px solid var(--desbr);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700">⚠️ Sin registro esta semana</span>`;
-  }
 }
 
-function renderInvRolView(data, role){
-  const body = document.getElementById('inv-rol-body');
-  const stockMap = {};
-  if(data?.items) data.items.forEach(i=>{ stockMap[i.name]={stock:i.stock,obs:i.obs||''}; });
+async function syncPendingInvMovs(){
+  if(OFFLINE || !sbClient) return;
+  const q = invPendGet();
+  if(!q.length) return;
+  const rest = [];
+  for(const op of q){
+    try{
+      if(op.op==='insert'){ const {error}=await sbClient.from('inventario_movimientos').insert(op.row); if(error&&!/duplicate|unique/i.test(error.message)) throw error; }
+      if(op.op==='update'){ const {error}=await sbClient.from('inventario_movimientos').update(op.row).eq('id',op.id); if(error) throw error; }
+      if(op.op==='delete'){ const {error}=await sbClient.from('inventario_movimientos').delete().eq('id',op.id); if(error) throw error; }
+    }catch(e){ rest.push(op); }
+  }
+  invPendSave(rest);
+  if(q.length && !rest.length) toast('☁️ Movimientos de inventario sincronizados');
+}
 
+// ════════════════════════════════════════════════
+// 1) CONTEO DIARIO
+// ════════════════════════════════════════════════
+function conteoDeFecha(fecha){
+  return invMovs.find(m=>m.tipo==='conteo' && m.fecha===fecha);
+}
+
+function cargarConteoFecha(){
+  invEditId = null;
+  document.getElementById('conteo-edit-banner').style.display='none';
+  document.getElementById('btn-cancelar-edicion').style.display='none';
+  document.getElementById('btn-guardar-conteo').textContent='💾 Guardar conteo';
+  const fecha = document.getElementById('conteo-fecha').value || hoyISO();
+  const existente = conteoDeFecha(fecha);
+  const badge = document.getElementById('conteo-estado-badge');
+  if(existente){
+    badge.innerHTML = `<span style="background:var(--okb);color:var(--ok);border:1px solid var(--recbr);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700">✅ Ya registrado por ${existente.usuario||'—'} — al guardar se actualiza</span>`;
+  } else {
+    badge.innerHTML = `<span style="background:var(--goldb);color:var(--des);border:1px solid var(--desbr);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700">⚠️ Sin conteo para esta fecha</span>`;
+  }
+  renderFormItems(existente?.items || []);
+}
+
+function renderFormItems(items){
+  const body = document.getElementById('conteo-body');
+  const map = {};
+  (items||[]).forEach(i=>{ map[i.name] = {cantidad:i.cantidad, obs:i.obs||''}; });
   let html = '';
   CATS.forEach(cat=>{
     html += `<tr class="cat-row"><td colspan="4" style="background:var(--g1);color:var(--g5)">${cat.icon} ${cat.label}</td></tr>`;
     cat.items.forEach(it=>{
-      const val = stockMap[it.n] || {stock:'',obs:''};
-      const inputCls = role==='solicitante' ? 'inp-sol' : 'inp-des';
-      html += `<tr class="prod-row" id="inv-row-${it.n.replace(/[^a-z0-9]/gi,'_')}">
+      const key = it.n.replace(/[^a-z0-9]/gi,'_');
+      const val = map[it.n] || {cantidad:'', obs:''};
+      html += `<tr class="prod-row" id="cnt-row-${key}">
         <td><div class="prod-name">${it.n}</div></td>
         <td style="text-align:center"><div class="prod-unit">${it.u}</div></td>
         <td style="text-align:center">
-          <input type="number" min="0" step="0.1" class="prod-input ${inputCls}" id="inv-${it.n.replace(/[^a-z0-9]/gi,'_')}"
-            value="${val.stock}" placeholder="0"
-            oninput="hlInvRow('${it.n.replace(/[^a-z0-9]/gi,'_')}',this.value)">
+          <input type="number" min="0" step="0.1" class="prod-input inp-sol" id="cnt-${key}"
+            value="${val.cantidad}" placeholder="0"
+            oninput="hlCntRow('${key}',this.value)">
         </td>
-        <td><input type="text" class="obs-inp" id="invobs-${it.n.replace(/[^a-z0-9]/gi,'_')}" value="${val.obs}" placeholder="Obs…"></td>
+        <td><input type="text" class="obs-inp" id="cntobs-${key}" value="${val.obs}" placeholder="Obs…"></td>
       </tr>`;
     });
   });
   body.innerHTML = html;
+  // resaltar filas con valor
+  CATS.forEach(cat=>cat.items.forEach(it=>{
+    const key = it.n.replace(/[^a-z0-9]/gi,'_');
+    hlCntRow(key, document.getElementById('cnt-'+key)?.value);
+  }));
 }
 
-function hlInvRow(key, val){
-  const row = document.getElementById('inv-row-'+key);
+function hlCntRow(key, val){
+  const row = document.getElementById('cnt-row-'+key);
   if(row) row.style.background = parseFloat(val)>0 ? 'rgba(26,95,165,.06)' : '';
 }
 
-function renderInvSupView(solData, desData, semana){
-  // Bodega Solicitante
-  const solFecha = document.getElementById('inv-sup-sol-fecha');
-  const desFecha = document.getElementById('inv-sup-des-fecha');
-  solFecha.textContent = solData ? 'Reg. '+new Date(solData.updated_at||solData.created_at).toLocaleDateString('es-CL') : 'Sin registro';
-  desFecha.textContent = desData ? 'Reg. '+new Date(desData.updated_at||desData.created_at).toLocaleDateString('es-CL') : 'Sin registro';
-
-  const renderTable = (data, bodyId) => {
-    const body = document.getElementById(bodyId);
-    if(!data?.items?.length){
-      body.innerHTML=`<tr><td colspan="3" style="text-align:center;padding:16px;color:var(--g4)">Sin registro esta semana</td></tr>`;
-      return;
-    }
-    body.innerHTML = data.items.filter(i=>parseFloat(i.stock)>0).map(i=>`
-      <tr>
-        <td style="font-size:12px">${i.name}</td>
-        <td style="text-align:center;font-size:11px;color:var(--g4)">${i.unit}</td>
-        <td style="text-align:right;font-weight:700;font-family:'DM Mono',monospace;color:var(--navy)">${i.stock}</td>
-      </tr>`).join('') || `<tr><td colspan="3" style="text-align:center;padding:12px;color:var(--g4)">Todos los stocks en 0</td></tr>`;
-  };
-  renderTable(solData, 'inv-sup-sol-body');
-  renderTable(desData, 'inv-sup-des-body');
-
-  // Comparativa consolidada
-  const solMap={}, desMap={};
-  (solData?.items||[]).forEach(i=>solMap[i.name]={stock:parseFloat(i.stock)||0,unit:i.unit});
-  (desData?.items||[]).forEach(i=>desMap[i.name]={stock:parseFloat(i.stock)||0,unit:i.unit});
-
-  // Pedidos de la semana actual para comparar
-  const pedidosSemana = orders.filter(o=>{
-    if(!o.savedAt) return false;
-    const d = new Date(o.savedAt);
-    return getSemanaActual() === getISOWeek(d);
-  });
-  const pedidoMap={};
-  pedidosSemana.forEach(o=>(o.items||[]).forEach(it=>{
-    pedidoMap[it.name]=(pedidoMap[it.name]||0)+(it.asked||0);
+function recolectarItemsForm(){
+  const items = [];
+  CATS.forEach(cat=>cat.items.forEach(it=>{
+    const key = it.n.replace(/[^a-z0-9]/gi,'_');
+    const cantidad = parseFloat(document.getElementById('cnt-'+key)?.value||0)||0;
+    const obs = document.getElementById('cntobs-'+key)?.value||'';
+    if(cantidad>0 || obs) items.push({name:it.n, unit:it.u, cantidad, obs});
   }));
+  return items;
+}
 
-  const allProducts = [...new Set([...Object.keys(solMap),...Object.keys(desMap)])].sort();
-  const compBody = document.getElementById('inv-comp-body');
-  if(!allProducts.length){
-    compBody.innerHTML=`<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--g4)">Sin datos de inventario para esta semana</td></tr>`;
+async function guardarConteo(){
+  if(!puedeRegistrarConteo() && !invEditId){
+    toast('Solo Solicitante y Supervisor pueden registrar conteos'); return;
+  }
+  const fecha = document.getElementById('conteo-fecha').value || hoyISO();
+  const items = recolectarItemsForm();
+  if(!items.length){ toast('Ingresa al menos una cantidad u observación'); return; }
+
+  // ¿Editando un movimiento existente?
+  if(invEditId){
+    const mov = invMovs.find(m=>m.id===invEditId);
+    if(!mov){ toast('Movimiento no encontrado'); cancelarEdicionMov(); return; }
+    if(!puedeEditarMov(mov)){ toast('No tienes permiso para editar este movimiento'); return; }
+    // Conservar ítems fuera del catálogo actual (p. ej. productos eliminados del admin)
+    const nombresCat = new Set(); CATS.forEach(c=>c.items.forEach(i=>nombresCat.add(i.n)));
+    const extras = (mov.items||[]).filter(i=>!nombresCat.has(i.name));
+    await persistirMovimiento({...mov, fecha, items:[...items,...extras], usuario:session?.name||mov.usuario, updated_at:new Date().toISOString()}, 'update');
+    cancelarEdicionMov();
+    switchInvTab('movs');
     return;
   }
-  compBody.innerHTML = allProducts.map(name=>{
-    const sol = solMap[name]?.stock||0;
-    const des = desMap[name]?.stock||0;
-    const total = sol+des;
-    const pedido = pedidoMap[name]||0;
-    const unit = solMap[name]?.unit || desMap[name]?.unit || '';
-    const relPct = pedido>0 ? Math.min(Math.round(total/pedido*100),200) : null;
-    const relCol = relPct===null ? 'var(--g4)' : relPct>=100 ? 'var(--ok)' : relPct>=50 ? 'var(--des)' : 'var(--er)';
-    const relTxt = relPct===null ? '—' : relPct+'%';
-    return `<tr>
-      <td style="font-size:12px;font-weight:600">${name}</td>
-      <td style="font-size:11px;color:var(--g4);text-align:center">${unit}</td>
-      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:var(--sol)">${sol||'—'}</td>
-      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:var(--des)">${des||'—'}</td>
-      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:var(--navy)">${total||'—'}</td>
-      <td style="text-align:right;font-family:'DM Mono',monospace;color:var(--g5)">${pedido||'—'}</td>
-      <td><span style="font-weight:700;font-size:12px;color:${relCol}">${relTxt}</span></td>
+
+  // Conteo del día: si ya existe uno para la fecha, se actualiza (1 conteo/día/local)
+  const existente = conteoDeFecha(fecha);
+  if(existente){
+    await persistirMovimiento({...existente, items, usuario:session?.name||'', updated_at:new Date().toISOString()}, 'update');
+  } else {
+    const mov = {
+      id: invUUID(), sistema, fecha, tipo:'conteo', origen:null,
+      usuario: session?.name||'', items,
+      created_at:new Date().toISOString(), updated_at:new Date().toISOString(),
+    };
+    await persistirMovimiento(mov, 'insert');
+  }
+  cargarConteoFecha();
+}
+
+async function persistirMovimiento(mov, op){
+  // Actualizar estado local siempre
+  const idx = invMovs.findIndex(m=>m.id===mov.id);
+  if(idx>=0) invMovs[idx]=mov; else invMovs.unshift(mov);
+  invMovs.sort((a,b)=> (b.fecha||'').localeCompare(a.fecha||'') || (b.created_at||'').localeCompare(a.created_at||''));
+  invCacheSave();
+
+  if(!OFFLINE && sbClient){
+    showLoading('Guardando movimiento…');
+    try{
+      let error;
+      if(op==='insert') ({error} = await sbClient.from('inventario_movimientos').insert(mov));
+      else ({error} = await sbClient.from('inventario_movimientos')
+        .update({fecha:mov.fecha, items:mov.items, usuario:mov.usuario, updated_at:mov.updated_at}).eq('id',mov.id));
+      hideLoading();
+      if(error) throw error;
+      toast(op==='insert' ? '✅ Conteo guardado en la nube — '+fmtFecha(mov.fecha) : '✅ Movimiento actualizado — '+fmtFecha(mov.fecha));
+    }catch(e){
+      hideLoading();
+      invPendAdd(op==='insert' ? {op:'insert', row:mov} : {op:'update', id:mov.id, row:{fecha:mov.fecha, items:mov.items, usuario:mov.usuario, updated_at:mov.updated_at}});
+      toast('💾 Guardado localmente — se sincronizará al reconectar');
+    }
+  } else {
+    invPendAdd(op==='insert' ? {op:'insert', row:mov} : {op:'update', id:mov.id, row:{fecha:mov.fecha, items:mov.items, usuario:mov.usuario, updated_at:mov.updated_at}});
+    toast('💾 Movimiento guardado localmente');
+  }
+}
+
+// ════════════════════════════════════════════════
+// 2) REGISTRO AUTOMÁTICO AL MARCAR "ENTREGADO"
+// ════════════════════════════════════════════════
+async function registrarEntregaInventario(order){
+  const items = (order.items||[])
+    .filter(it=>(parseFloat(it.delivered)||0)>0)
+    .map(it=>({name:it.name, unit:it.unit, cantidad:parseFloat(it.delivered)||0, obs:'Pedido '+order.folio}));
+  if(!items.length) return;
+
+  // Asegurar caché cargada aunque nunca se haya abierto la pestaña
+  if(!invLoaded && !invMovs.length) invMovs = invCacheLoad();
+
+  // Evitar duplicado (local)
+  if(invMovs.some(m=>m.tipo==='entrega' && m.origen===order.folio)) return;
+
+  const mov = {
+    id: invUUID(), sistema, fecha: hoyISO(), tipo:'entrega', origen:order.folio,
+    usuario: session?.name||'', items,
+    created_at:new Date().toISOString(), updated_at:new Date().toISOString(),
+  };
+
+  if(!OFFLINE && sbClient){
+    try{
+      // Evitar duplicado (nube)
+      const { data:ex } = await sbClient.from('inventario_movimientos')
+        .select('id').eq('sistema',sistema).eq('tipo','entrega').eq('origen',order.folio).limit(1);
+      if(ex && ex.length) return;
+      const { error } = await sbClient.from('inventario_movimientos').insert(mov);
+      if(error) throw error;
+      invMovs.unshift(mov); invCacheSave();
+      toast('📦 Inventario actualizado con la entrega '+order.folio);
+    }catch(e){
+      invPendAdd({op:'insert', row:mov});
+      invMovs.unshift(mov); invCacheSave();
+      toast('📦 Entrega registrada localmente — se sincronizará al reconectar');
+    }
+  } else {
+    invPendAdd({op:'insert', row:mov});
+    invMovs.unshift(mov); invCacheSave();
+    toast('📦 Entrega registrada en inventario (local)');
+  }
+}
+
+// ════════════════════════════════════════════════
+// 3) MOVIMIENTOS — editar / eliminar
+// ════════════════════════════════════════════════
+function renderMovimientos(){
+  const body = document.getElementById('invmov-body');
+  document.getElementById('invmov-count').textContent = invMovs.length + ' movimiento' + (invMovs.length===1?'':'s');
+  if(!invMovs.length){
+    body.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--g4)">Sin movimientos aún. Registra un conteo o marca un pedido como Entregado.</td></tr>`;
+    return;
+  }
+  body.innerHTML = invMovs.map(m=>{
+    const tipoPill = m.tipo==='conteo'
+      ? `<span class="mov-pill mov-conteo">📆 Conteo</span>`
+      : m.tipo==='transferencia'
+        ? `<span class="mov-pill mov-transfer">🔄 Transferencia</span>`
+        : `<span class="mov-pill mov-entrega">🚚 Entrega</span>`;
+    const acciones = puedeEditarMov(m)
+      ? `<button class="mov-btn" title="Editar" onclick="event.stopPropagation();editarMovimiento('${m.id}')">✏️</button>
+         <button class="mov-btn" title="Eliminar" onclick="event.stopPropagation();eliminarMovimiento('${m.id}')">🗑️</button>`
+      : `<span style="font-size:11px;color:var(--g4)">—</span>`;
+    const detalle = (m.items||[]).map(i=>`
+      <tr><td style="font-size:12px;padding-left:24px">${i.name}</td>
+      <td style="font-size:11px;color:var(--g4);text-align:center">${i.unit||''}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700">${i.cantidad}</td>
+      <td colspan="3" style="font-size:11px;color:var(--g4)">${i.obs||''}</td></tr>`).join('');
+    return `<tr style="cursor:pointer" onclick="toggleMovDetalle('${m.id}')">
+      <td style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700">${fmtFecha(m.fecha)}</td>
+      <td>${tipoPill}</td>
+      <td style="font-size:12px">${m.origen||'—'}</td>
+      <td style="font-size:12px">${m.usuario||'—'}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace">${(m.items||[]).length}</td>
+      <td style="text-align:center;white-space:nowrap">${acciones}</td>
+    </tr>
+    <tr id="movdet-${m.id}" style="display:none;background:var(--g1)">
+      <td colspan="6" style="padding:0">
+        <table class="dash-table" style="margin:0"><tbody>${detalle||'<tr><td style="padding:10px;color:var(--g4);font-size:12px">Sin ítems</td></tr>'}</tbody></table>
+      </td>
     </tr>`;
   }).join('');
 }
 
-async function renderInvHistorial(){
-  const body = document.getElementById('inv-hist-body');
-  let registros = [];
-  if(!OFFLINE && sbClient){
-    try {
-      const { data } = await sbClient.from('inventario')
-        .select('semana,bodega,usuario,updated_at,items')
-        .eq('sistema',sistema).order('updated_at',{ascending:false}).limit(40);
-      registros = data||[];
-    } catch(e){}
-  }
-  if(!registros.length){
-    body.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--g4)">Sin historial aún</td></tr>`;
-    return;
-  }
-  const bodegaLabel = {solicitante:'📋 Solicitante',despachador:'📦 Bodega Central'};
-  body.innerHTML = registros.map(r=>`<tr>
-    <td style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700">${semanaLabel(r.semana)}</td>
-    <td>${bodegaLabel[r.bodega]||r.bodega}</td>
-    <td>${r.usuario||'—'}</td>
-    <td style="text-align:right;font-family:'DM Mono',monospace">${(r.items||[]).filter(i=>parseFloat(i.stock)>0).length}</td>
-    <td style="font-size:11px;color:var(--g4)">${new Date(r.updated_at).toLocaleString('es-CL')}</td>
-  </tr>`).join('');
+function toggleMovDetalle(id){
+  const r = document.getElementById('movdet-'+id);
+  if(r) r.style.display = r.style.display==='none' ? '' : 'none';
 }
 
-function getISOWeek(date){
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-  return d.getUTCFullYear() + '-W' + String(weekNo).padStart(2,'0');
+function editarMovimiento(id){
+  const mov = invMovs.find(m=>m.id===id);
+  if(!mov){ toast('Movimiento no encontrado'); return; }
+  if(!puedeEditarMov(mov)){ toast('No tienes permiso para editar este movimiento'); return; }
+  invEditId = id;
+  switchInvTab('conteo');
+  document.getElementById('conteo-fecha').value = mov.fecha;
+  document.getElementById('conteo-estado-badge').innerHTML='';
+  const banner = document.getElementById('conteo-edit-banner');
+  banner.style.display='block';
+  const tipoTxt = {conteo:'conteo', entrega:'entrega', transferencia:'transferencia'}[mov.tipo]||mov.tipo;
+  banner.innerHTML = `✏️ Editando ${tipoTxt} del ${fmtFecha(mov.fecha)}${mov.origen?' — '+mov.origen:''}. Ajusta cantidades y guarda.`;
+  document.getElementById('btn-guardar-conteo').textContent='💾 Guardar cambios';
+  document.getElementById('btn-cancelar-edicion').style.display='';
+  renderFormItems(mov.items||[]);
 }
 
-async function guardarInventario(){
-  const semana = document.getElementById('inv-semana').value;
-  const role = session?.role;
-  if(!['solicitante','despachador'].includes(role)){
-    toast('Solo Solicitante y Bodega Central pueden registrar inventario');return;
-  }
-  const bodega = role; // 'solicitante' o 'despachador'
+function cancelarEdicionMov(){
+  invEditId = null;
+  document.getElementById('conteo-edit-banner').style.display='none';
+  document.getElementById('btn-cancelar-edicion').style.display='none';
+  document.getElementById('btn-guardar-conteo').textContent='💾 Guardar conteo';
+  cargarConteoFecha();
+}
 
-  // Recolectar items
-  const items = [];
-  CATS.forEach(cat=>{
-    cat.items.forEach(it=>{
-      const key = it.n.replace(/[^a-z0-9]/gi,'_');
-      const stockEl = document.getElementById('inv-'+key);
-      const obsEl = document.getElementById('invobs-'+key);
-      const stock = parseFloat(stockEl?.value||0)||0;
-      const obs = obsEl?.value||'';
-      if(stock>0||obs) items.push({name:it.n,unit:it.u,stock,obs});
-    });
-  });
+async function eliminarMovimiento(id){
+  const mov = invMovs.find(m=>m.id===id);
+  if(!mov){ return; }
+  if(!puedeEditarMov(mov)){ toast('No tienes permiso para eliminar este movimiento'); return; }
+  const desc = mov.tipo==='conteo' ? 'el conteo del '+fmtFecha(mov.fecha)
+    : mov.tipo==='transferencia' ? 'la transferencia '+(mov.origen||'')+' del '+fmtFecha(mov.fecha)
+    : 'la entrega '+(mov.origen||'')+' del '+fmtFecha(mov.fecha);
+  if(!confirm('¿Eliminar '+desc+'?')) return;
 
-  const row = {
-    sistema, semana, bodega,
-    usuario: session.name,
-    items,
-    updated_at: new Date().toISOString(),
-  };
+  invMovs = invMovs.filter(m=>m.id!==id);
+  invCacheSave();
+  if(invEditId===id) cancelarEdicionMov();
 
-  // Guardar local siempre
-  const localKey = 'inv_'+sistema+'_'+semana;
-  let registros = JSON.parse(localStorage.getItem(localKey)||'[]');
-  const idx = registros.findIndex(r=>r.bodega===bodega);
-  if(idx>=0) registros[idx]={...registros[idx],...row}; else registros.push(row);
-  localStorage.setItem(localKey, JSON.stringify(registros));
-
-  // Guardar en Supabase
   if(!OFFLINE && sbClient){
-    showLoading('Guardando inventario…');
-    try {
-      const { error } = await sbClient.from('inventario')
-        .upsert({...row, created_at: new Date().toISOString()},
-          {onConflict:'sistema,semana,bodega'});
-      hideLoading();
+    try{
+      const { error } = await sbClient.from('inventario_movimientos').delete().eq('id',id);
       if(error) throw error;
-      toast('✅ Inventario guardado en la nube — '+semanaLabel(semana));
-    } catch(e) {
-      hideLoading();
-      toast('💾 Guardado localmente — se sincronizará al reconectar');
+      toast('🗑️ Movimiento eliminado');
+    }catch(e){
+      invPendAdd({op:'delete', id});
+      toast('🗑️ Eliminado localmente — se sincronizará al reconectar');
     }
   } else {
-    toast('💾 Inventario guardado localmente');
+    // Si estaba pendiente de insertar, basta quitarlo de la cola
+    const q = invPendGet().filter(o=>!(o.op==='insert' && o.row?.id===id));
+    const teniaInsert = invPendGet().length !== q.length;
+    if(!teniaInsert) q.push({op:'delete', id});
+    invPendSave(q);
+    toast('🗑️ Movimiento eliminado (local)');
   }
-
-  await cargarInventarioSemana();
+  renderMovimientos();
 }
 
-function exportarInventarioCSV(){
-  const semana = document.getElementById('inv-semana').value;
-  const localKey = 'inv_'+sistema+'_'+semana;
-  const registros = JSON.parse(localStorage.getItem(localKey)||'[]');
-  const solData = registros.find(r=>r.bodega==='solicitante');
-  const desData = registros.find(r=>r.bodega==='despachador');
-
-  const solMap={}, desMap={};
-  (solData?.items||[]).forEach(i=>solMap[i.name]={stock:i.stock,unit:i.unit,obs:i.obs||''});
-  (desData?.items||[]).forEach(i=>desMap[i.name]={stock:i.stock,unit:i.unit,obs:i.obs||''});
-  const all=[...new Set([...Object.keys(solMap),...Object.keys(desMap)])].sort();
-
-  const rows=[['Semana','Producto','Unidad','Stock Solicitante','Obs. Solicitante','Stock Bodega Central','Obs. Bodega Central','Total']];
-  all.forEach(name=>{
-    const s=solMap[name]||{stock:0,unit:'',obs:''};
-    const d=desMap[name]||{stock:0,unit:'',obs:''};
-    rows.push([semanaLabel(semana),name,s.unit||d.unit,s.stock||0,s.obs,d.stock||0,d.obs,(s.stock||0)+(d.stock||0)]);
+// ════════════════════════════════════════════════
+// STOCK ACTUAL (último conteo + entregas posteriores)
+// ════════════════════════════════════════════════
+function calcularStock(){
+  // Por producto: base = último conteo; suma entregas con fecha posterior (o misma fecha, creadas después)
+  const prods = {}; // name -> {unit, conteo, fechaConteo, tsConteo, entregas}
+  const orden = [...invMovs].sort((a,b)=> (a.fecha||'').localeCompare(b.fecha||'') || (a.created_at||'').localeCompare(b.created_at||''));
+  orden.forEach(m=>{
+    (m.items||[]).forEach(i=>{
+      const cant = parseFloat(i.cantidad)||0;
+      if(!prods[i.name]) prods[i.name]={unit:i.unit||'', conteo:null, fechaConteo:null, entregas:0};
+      const p = prods[i.name];
+      if(!p.unit && i.unit) p.unit = i.unit;
+      if(m.tipo==='conteo'){
+        p.conteo = cant; p.fechaConteo = m.fecha; p.entregas = 0; // el conteo reinicia la base
+      } else {
+        p.entregas += cant;
+      }
+    });
   });
-  const csv=rows.map(r=>r.map(v=>'"'+String(v||'').replace(/"/g,'""')+'"').join(',')).join('\n');
-  const b=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
-  const u=URL.createObjectURL(b);const a=document.createElement('a');
-  a.href=u;a.download='inventario_'+sistema+'_'+semana+'.csv';a.click();URL.revokeObjectURL(u);
-  toast('✅ Inventario exportado a CSV');
+  return prods;
+}
+
+function renderStockActual(){
+  const body = document.getElementById('inv-stock-body');
+  const prods = calcularStock();
+  const names = Object.keys(prods).sort();
+  document.getElementById('inv-stock-info').textContent = invMovs.length ? 'Basado en '+invMovs.length+' movimientos' : '';
+  if(!names.length){
+    body.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--g4)">Sin datos. Registra un conteo diario para establecer la base del stock.</td></tr>`;
+    return;
+  }
+  body.innerHTML = names.map(n=>{
+    const p = prods[n];
+    const sinBase = p.conteo===null;
+    const stock = (p.conteo||0) + p.entregas;
+    return `<tr>
+      <td style="font-size:12px;font-weight:600">${n}</td>
+      <td style="font-size:11px;color:var(--g4);text-align:center">${p.unit}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;color:var(--sol)">${sinBase?'—':p.conteo}</td>
+      <td style="font-size:11px;color:var(--g4)">${sinBase?'⚠️ sin conteo base':fmtFecha(p.fechaConteo)}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;color:${p.entregas<0?'var(--er)':'var(--rec)'}">${p.entregas ? (p.entregas>0?'+':'')+ +p.entregas.toFixed(2) : '—'}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:var(--navy)">${+stock.toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ════════════════════════════════════════════════
+// 4) REPORTE — diario / semanal / quincenal / mensual
+// ════════════════════════════════════════════════
+function rangoPeriodo(tipo, fechaStr){
+  const iso = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const d = new Date(fechaStr+'T00:00:00');
+  if(tipo==='diario') return [fechaStr, fechaStr];
+  if(tipo==='semanal'){
+    const day = d.getDay()||7;
+    const ini = new Date(d); ini.setDate(d.getDate()-day+1);
+    const fin = new Date(ini); fin.setDate(ini.getDate()+6);
+    return [iso(ini), iso(fin)];
+  }
+  const y = d.getFullYear(), m = d.getMonth();
+  if(tipo==='quincenal'){
+    return d.getDate()<=15
+      ? [iso(new Date(y,m,1)),  iso(new Date(y,m,15))]
+      : [iso(new Date(y,m,16)), iso(new Date(y,m+1,0))];
+  }
+  return [iso(new Date(y,m,1)), iso(new Date(y,m+1,0))]; // mensual
+}
+
+function movsEnRango(ini, fin){
+  return invMovs.filter(m=>m.fecha>=ini && m.fecha<=fin);
+}
+
+function datosReporte(){
+  const tipo = document.getElementById('rep-periodo').value;
+  const fecha = document.getElementById('rep-fecha').value || hoyISO();
+  const [ini, fin] = rangoPeriodo(tipo, fecha);
+  const movs = movsEnRango(ini, fin);
+  const prods = {}; // name -> {unit, entregas, conteos, ultConteo, ultFecha}
+  const orden = [...movs].sort((a,b)=> (a.fecha||'').localeCompare(b.fecha||'') || (a.created_at||'').localeCompare(b.created_at||''));
+  orden.forEach(m=>{
+    (m.items||[]).forEach(i=>{
+      const cant = parseFloat(i.cantidad)||0;
+      if(!prods[i.name]) prods[i.name]={unit:i.unit||'', entregas:0, transf:0, conteos:0, ultConteo:null, ultFecha:null};
+      const p = prods[i.name];
+      if(!p.unit && i.unit) p.unit = i.unit;
+      if(m.tipo==='entrega') p.entregas += cant;
+      else if(m.tipo==='transferencia') p.transf += cant;
+      else { p.conteos++; p.ultConteo = cant; p.ultFecha = m.fecha; }
+    });
+  });
+  return {tipo, ini, fin, movs, prods};
+}
+
+function renderReporte(){
+  const {ini, fin, movs, prods} = datosReporte();
+  document.getElementById('rep-rango').textContent = ini===fin ? fmtFecha(ini) : fmtFecha(ini)+' → '+fmtFecha(fin);
+
+  const nConteos = movs.filter(m=>m.tipo==='conteo').length;
+  const nEntregas = movs.filter(m=>m.tipo==='entrega').length;
+  const nTransf = movs.filter(m=>m.tipo==='transferencia').length;
+  const totEntregado = movs.filter(m=>m.tipo==='entrega')
+    .reduce((s,m)=>s+(m.items||[]).reduce((a,i)=>a+(parseFloat(i.cantidad)||0),0),0);
+  const kpis = [
+    {v:movs.length, l:'Movimientos', bg:'var(--solb)', c:'var(--sol)'},
+    {v:nConteos, l:'Conteos', bg:'var(--supb)', c:'var(--sup)'},
+    {v:nEntregas, l:'Entregas', bg:'var(--recb)', c:'var(--rec)'},
+    {v:nTransf, l:'Transferencias', bg:'var(--goldb)', c:'var(--des)'},
+    {v:+totEntregado.toFixed(1), l:'Unid. ingresadas', bg:'var(--okb)', c:'var(--ok)'},
+    {v:Object.keys(prods).length, l:'Productos con mov.', bg:'var(--solb)', c:'var(--navy)'},
+  ];
+  document.getElementById('rep-kpis').innerHTML = kpis.map(k=>`
+    <div class="kpi-card" style="background:${k.bg}">
+      <div class="kpi-val" style="color:${k.c}">${k.v}</div>
+      <div class="kpi-lbl" style="color:${k.c}">${k.l}</div>
+    </div>`).join('');
+
+  const body = document.getElementById('rep-body');
+  const names = Object.keys(prods).sort();
+  if(!names.length){
+    body.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--g4)">Sin movimientos en este periodo</td></tr>`;
+    return;
+  }
+  body.innerHTML = names.map(n=>{
+    const p = prods[n];
+    return `<tr>
+      <td style="font-size:12px;font-weight:600">${n}</td>
+      <td style="font-size:11px;color:var(--g4);text-align:center">${p.unit}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:var(--rec)">${p.entregas?+p.entregas.toFixed(2):'—'}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;color:${p.transf<0?'var(--er)':'var(--sup)'}">${p.transf?(p.transf>0?'+':'')+ +p.transf.toFixed(2):'—'}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace">${p.conteos||'—'}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;color:var(--sol)">${p.ultConteo===null?'—':p.ultConteo}</td>
+      <td style="font-size:11px;color:var(--g4)">${p.ultFecha?fmtFecha(p.ultFecha):'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function exportarReporteCSV(){
+  const {tipo, ini, fin, prods} = datosReporte();
+  const names = Object.keys(prods).sort();
+  if(!names.length){ toast('Sin datos para exportar en este periodo'); return; }
+  const rows = [['Local','Periodo','Desde','Hasta','Producto','Unidad','Total Entregas','Total Transferencias','N° Conteos','Último Conteo','Fecha Último Conteo']];
+  names.forEach(n=>{
+    const p = prods[n];
+    rows.push([SISTEMAS[sistema]?.nombre||sistema, tipo, ini, fin, n, p.unit, p.entregas, p.transf, p.conteos, p.ultConteo===null?'':p.ultConteo, p.ultFecha||'']);
+  });
+  const csv = rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\n');
+  const b = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+  const u = URL.createObjectURL(b); const a = document.createElement('a');
+  a.href=u; a.download='inventario_'+sistema+'_'+tipo+'_'+ini+'.csv'; a.click(); URL.revokeObjectURL(u);
+  toast('✅ Reporte exportado a CSV');
 }
 // ════════════════════════════════════════════════
 // TRANSFERENCIAS ENTRE LOCALES
@@ -2517,8 +2784,8 @@ async function guardarTransferencia(){
       } else {
         const {error} = await sbClient.from('transferencias').insert(row);
         if(error) throw error;
-        await actualizarInventarioTr(trOrigen, items, -1);
-        await actualizarInventarioTr(trDestino, items, +1);
+        await actualizarInventarioTr(trOrigen, items, -1, folio);
+        await actualizarInventarioTr(trDestino, items, +1, folio);
       }
     }
     // Actualizar local
@@ -2536,31 +2803,24 @@ async function guardarTransferencia(){
   }
 }
 
-async function actualizarInventarioTr(sistemaId, items, signo){
-  // Buscar semana actual
-  const semana = getSemanaActual();
+async function actualizarInventarioTr(sistemaId, items, signo, folioTr){
+  // Registrar la transferencia como movimiento de inventario del local afectado
+  // signo -1 = salida (origen), +1 = ingreso (destino)
+  if(sistemaId === 'bodega_central') return; // Bodega Central no lleva inventario por local
   try {
-    const {data} = await sbClient.from('inventario')
-      .select('*').eq('sistema',sistemaId).eq('semana',semana).eq('bodega','despachador').single();
-
-    let invItems = data?.items || [];
-    items.forEach(tr=>{
-      const idx = invItems.findIndex(i=>i.name===tr.name);
-      if(idx>=0){
-        invItems[idx].stock = Math.max(0, (parseFloat(invItems[idx].stock)||0) + signo*tr.cantidad);
-      } else if(signo>0){
-        // Solo agregar si es destino (suma)
-        invItems.push({name:tr.name, unit:tr.unit, stock:tr.cantidad, obs:'Transferencia'});
-      }
-    });
-
-    await sbClient.from('inventario').upsert({
-      sistema:sistemaId, semana, bodega:'despachador',
-      usuario:'Sistema (transferencia)',
-      items:invItems, updated_at:new Date().toISOString(),
-    },{onConflict:'sistema,semana,bodega'});
+    const mov = {
+      id: invUUID(), sistema: sistemaId, fecha: hoyISO(),
+      tipo:'transferencia', origen: folioTr || null,
+      usuario: session?.name || 'Sistema (transferencia)',
+      items: items.map(tr=>({name:tr.name, unit:tr.unit, cantidad: signo*(parseFloat(tr.cantidad)||0), obs:'Transferencia '+(folioTr||'')})),
+      created_at:new Date().toISOString(), updated_at:new Date().toISOString(),
+    };
+    const { error } = await sbClient.from('inventario_movimientos').insert(mov);
+    if(error) throw error;
+    // Si afecta al local actual, reflejar en caché local
+    if(sistemaId === sistema){ invMovs.unshift(mov); invCacheSave(); }
   } catch(e){
-    console.warn('No se pudo actualizar inventario de '+sistemaId, e);
+    console.warn('No se pudo registrar movimiento de inventario para '+sistemaId, e);
   }
 }
 

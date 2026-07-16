@@ -345,6 +345,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
 .mov-conteo{background:var(--solb);color:var(--sol)}
 .mov-entrega{background:var(--recb);color:var(--rec)}
 .mov-transfer{background:var(--supb);color:var(--sup)}
+.mov-salida{background:var(--erb);color:var(--er)}
 .mov-btn{border:1px solid var(--g2);border-radius:6px;background:white;cursor:pointer;padding:3px 7px;font-size:13px;margin:0 2px}
 .mov-btn:hover{background:var(--g1)}
 </style>
@@ -633,7 +634,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
       <!-- Sub-pestañas -->
       <div class="inv-subtabs">
         <button class="inv-subtab active" data-invtab="stock" onclick="switchInvTab('stock')">📦 Stock actual</button>
-        <button class="inv-subtab" data-invtab="conteo" id="inv-tab-conteo" onclick="switchInvTab('conteo')">📆 Conteo diario</button>
+        <button class="inv-subtab" data-invtab="conteo" id="inv-tab-conteo" onclick="switchInvTab('conteo')">📝 Conteo / Salida</button>
         <button class="inv-subtab" data-invtab="movs" onclick="switchInvTab('movs')">📜 Movimientos</button>
         <button class="inv-subtab" data-invtab="reporte" onclick="switchInvTab('reporte')">📊 Reporte</button>
       </div>
@@ -660,7 +661,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
           </div>
         </div>
         <div style="margin-top:12px;font-size:12px;color:var(--g4);text-align:center">
-          💡 Stock estimado = último conteo registrado ± entregas de pedidos y transferencias posteriores a ese conteo.
+          💡 Stock estimado = último conteo registrado + entregas de pedidos − salidas ± transferencias posteriores a ese conteo.
         </div>
       </div>
 
@@ -669,8 +670,15 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
         <div class="card" style="margin-bottom:14px">
           <div class="card-body" style="padding:14px 18px">
             <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap">
+              <div class="mf" style="margin:0;min-width:170px">
+                <label>Tipo de registro</label>
+                <select id="reg-tipo" style="width:100%;padding:8px 11px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px;font-family:inherit" onchange="cambioTipoRegistro()">
+                  <option value="conteo">📆 Conteo (stock contado)</option>
+                  <option value="salida">📤 Salida (descuenta del stock)</option>
+                </select>
+              </div>
               <div class="mf" style="margin:0;flex:1;min-width:170px">
-                <label>Fecha del conteo</label>
+                <label>Fecha</label>
                 <input type="date" id="conteo-fecha" style="width:100%;padding:8px 11px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px;font-family:inherit" onchange="cargarConteoFecha()">
               </div>
               <div id="conteo-estado-badge" style="font-size:12px;padding-bottom:6px"></div>
@@ -696,7 +704,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
           </div>
         </div>
         <div style="margin-top:12px;font-size:12px;color:var(--g4);text-align:center">
-          💡 Se guarda un conteo por día y por local. Si ya existe uno para la fecha, al guardar se actualiza.
+          💡 <strong>Conteo</strong>: uno por día y por local; si ya existe, al guardar se actualiza. <strong>Salida</strong>: descuenta del stock; puedes registrar varias en un mismo día (consumo, mermas, etc.).
         </div>
       </div>
 
@@ -757,6 +765,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
               <thead><tr>
                 <th>Producto</th><th>Unidad</th>
                 <th style="text-align:right">Σ Entregas</th>
+                <th style="text-align:right">Σ Salidas</th>
                 <th style="text-align:right">Σ Transf. (±)</th>
                 <th style="text-align:right">N° conteos</th>
                 <th style="text-align:right">Último conteo</th>
@@ -2114,7 +2123,7 @@ function puedeRegistrarConteo(){ return ['solicitante','supervisor'].includes(se
 function puedeEditarMov(m){
   const r = session?.role;
   if(r === 'supervisor') return true;
-  if(r === 'solicitante' && m.tipo === 'conteo') return true;
+  if(r === 'solicitante' && ['conteo','salida'].includes(m.tipo)) return true;
   return false;
 }
 
@@ -2203,14 +2212,34 @@ function conteoDeFecha(fecha){
   return invMovs.find(m=>m.tipo==='conteo' && m.fecha===fecha);
 }
 
+function tipoRegistroActual(){
+  return document.getElementById('reg-tipo')?.value || 'conteo';
+}
+
+function cambioTipoRegistro(){
+  if(invEditId) return; // en edición el tipo es fijo
+  cargarConteoFecha();
+}
+
 function cargarConteoFecha(){
   invEditId = null;
+  document.getElementById('reg-tipo').disabled = false;
   document.getElementById('conteo-edit-banner').style.display='none';
   document.getElementById('btn-cancelar-edicion').style.display='none';
-  document.getElementById('btn-guardar-conteo').textContent='💾 Guardar conteo';
   const fecha = document.getElementById('conteo-fecha').value || hoyISO();
-  const existente = conteoDeFecha(fecha);
   const badge = document.getElementById('conteo-estado-badge');
+  const tipo = tipoRegistroActual();
+
+  if(tipo === 'salida'){
+    document.getElementById('btn-guardar-conteo').textContent='💾 Registrar salida';
+    const salidasDia = invMovs.filter(m=>m.tipo==='salida' && m.fecha===fecha).length;
+    badge.innerHTML = `<span style="background:var(--erb);color:var(--er);border:1px solid var(--g2);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700">📤 Las cantidades se descuentan del stock${salidasDia?' — '+salidasDia+' salida'+(salidasDia>1?'s':'')+' ya registrada'+(salidasDia>1?'s':'')+' este día':''}</span>`;
+    renderFormItems([]);
+    return;
+  }
+
+  document.getElementById('btn-guardar-conteo').textContent='💾 Guardar conteo';
+  const existente = conteoDeFecha(fecha);
   if(existente){
     badge.innerHTML = `<span style="background:var(--okb);color:var(--ok);border:1px solid var(--recbr);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700">✅ Ya registrado por ${existente.usuario||'—'} — al guardar se actualiza</span>`;
   } else {
@@ -2287,6 +2316,18 @@ async function guardarConteo(){
     return;
   }
 
+  // Salida: cada guardado inserta un movimiento nuevo (pueden haber varias por día)
+  if(tipoRegistroActual() === 'salida'){
+    const mov = {
+      id: invUUID(), sistema, fecha, tipo:'salida', origen:null,
+      usuario: session?.name||'', items,
+      created_at:new Date().toISOString(), updated_at:new Date().toISOString(),
+    };
+    await persistirMovimiento(mov, 'insert');
+    cargarConteoFecha();
+    return;
+  }
+
   // Conteo del día: si ya existe uno para la fecha, se actualiza (1 conteo/día/local)
   const existente = conteoDeFecha(fecha);
   if(existente){
@@ -2318,7 +2359,8 @@ async function persistirMovimiento(mov, op){
         .update({fecha:mov.fecha, items:mov.items, usuario:mov.usuario, updated_at:mov.updated_at}).eq('id',mov.id));
       hideLoading();
       if(error) throw error;
-      toast(op==='insert' ? '✅ Conteo guardado en la nube — '+fmtFecha(mov.fecha) : '✅ Movimiento actualizado — '+fmtFecha(mov.fecha));
+      const nombreTipo = {conteo:'Conteo', salida:'Salida', entrega:'Entrega', transferencia:'Transferencia'}[mov.tipo]||'Movimiento';
+      toast(op==='insert' ? '✅ '+nombreTipo+' guardado en la nube — '+fmtFecha(mov.fecha) : '✅ Movimiento actualizado — '+fmtFecha(mov.fecha));
     }catch(e){
       hideLoading();
       invPendAdd(op==='insert' ? {op:'insert', row:mov} : {op:'update', id:mov.id, row:{fecha:mov.fecha, items:mov.items, usuario:mov.usuario, updated_at:mov.updated_at}});
@@ -2388,7 +2430,9 @@ function renderMovimientos(){
       ? `<span class="mov-pill mov-conteo">📆 Conteo</span>`
       : m.tipo==='transferencia'
         ? `<span class="mov-pill mov-transfer">🔄 Transferencia</span>`
-        : `<span class="mov-pill mov-entrega">🚚 Entrega</span>`;
+        : m.tipo==='salida'
+          ? `<span class="mov-pill mov-salida">📤 Salida</span>`
+          : `<span class="mov-pill mov-entrega">🚚 Entrega</span>`;
     const acciones = puedeEditarMov(m)
       ? `<button class="mov-btn" title="Editar" onclick="event.stopPropagation();editarMovimiento('${m.id}')">✏️</button>
          <button class="mov-btn" title="Eliminar" onclick="event.stopPropagation();eliminarMovimiento('${m.id}')">🗑️</button>`
@@ -2425,11 +2469,14 @@ function editarMovimiento(id){
   if(!puedeEditarMov(mov)){ toast('No tienes permiso para editar este movimiento'); return; }
   invEditId = id;
   switchInvTab('conteo');
+  const sel = document.getElementById('reg-tipo');
+  if(['conteo','salida'].includes(mov.tipo)) sel.value = mov.tipo;
+  sel.disabled = true; // el tipo no cambia al editar
   document.getElementById('conteo-fecha').value = mov.fecha;
   document.getElementById('conteo-estado-badge').innerHTML='';
   const banner = document.getElementById('conteo-edit-banner');
   banner.style.display='block';
-  const tipoTxt = {conteo:'conteo', entrega:'entrega', transferencia:'transferencia'}[mov.tipo]||mov.tipo;
+  const tipoTxt = {conteo:'conteo', entrega:'entrega', transferencia:'transferencia', salida:'salida'}[mov.tipo]||mov.tipo;
   banner.innerHTML = `✏️ Editando ${tipoTxt} del ${fmtFecha(mov.fecha)}${mov.origen?' — '+mov.origen:''}. Ajusta cantidades y guarda.`;
   document.getElementById('btn-guardar-conteo').textContent='💾 Guardar cambios';
   document.getElementById('btn-cancelar-edicion').style.display='';
@@ -2449,6 +2496,7 @@ async function eliminarMovimiento(id){
   if(!mov){ return; }
   if(!puedeEditarMov(mov)){ toast('No tienes permiso para eliminar este movimiento'); return; }
   const desc = mov.tipo==='conteo' ? 'el conteo del '+fmtFecha(mov.fecha)
+    : mov.tipo==='salida' ? 'la salida del '+fmtFecha(mov.fecha)
     : mov.tipo==='transferencia' ? 'la transferencia '+(mov.origen||'')+' del '+fmtFecha(mov.fecha)
     : 'la entrega '+(mov.origen||'')+' del '+fmtFecha(mov.fecha);
   if(!confirm('¿Eliminar '+desc+'?')) return;
@@ -2492,6 +2540,8 @@ function calcularStock(){
       if(!p.unit && i.unit) p.unit = i.unit;
       if(m.tipo==='conteo'){
         p.conteo = cant; p.fechaConteo = m.fecha; p.entregas = 0; // el conteo reinicia la base
+      } else if(m.tipo==='salida'){
+        p.entregas -= cant;
       } else {
         p.entregas += cant;
       }
@@ -2560,10 +2610,11 @@ function datosReporte(){
   orden.forEach(m=>{
     (m.items||[]).forEach(i=>{
       const cant = parseFloat(i.cantidad)||0;
-      if(!prods[i.name]) prods[i.name]={unit:i.unit||'', entregas:0, transf:0, conteos:0, ultConteo:null, ultFecha:null};
+      if(!prods[i.name]) prods[i.name]={unit:i.unit||'', entregas:0, salidas:0, transf:0, conteos:0, ultConteo:null, ultFecha:null};
       const p = prods[i.name];
       if(!p.unit && i.unit) p.unit = i.unit;
       if(m.tipo==='entrega') p.entregas += cant;
+      else if(m.tipo==='salida') p.salidas += cant;
       else if(m.tipo==='transferencia') p.transf += cant;
       else { p.conteos++; p.ultConteo = cant; p.ultFecha = m.fecha; }
     });
@@ -2577,15 +2628,20 @@ function renderReporte(){
 
   const nConteos = movs.filter(m=>m.tipo==='conteo').length;
   const nEntregas = movs.filter(m=>m.tipo==='entrega').length;
+  const nSalidas = movs.filter(m=>m.tipo==='salida').length;
   const nTransf = movs.filter(m=>m.tipo==='transferencia').length;
   const totEntregado = movs.filter(m=>m.tipo==='entrega')
+    .reduce((s,m)=>s+(m.items||[]).reduce((a,i)=>a+(parseFloat(i.cantidad)||0),0),0);
+  const totSalido = movs.filter(m=>m.tipo==='salida')
     .reduce((s,m)=>s+(m.items||[]).reduce((a,i)=>a+(parseFloat(i.cantidad)||0),0),0);
   const kpis = [
     {v:movs.length, l:'Movimientos', bg:'var(--solb)', c:'var(--sol)'},
     {v:nConteos, l:'Conteos', bg:'var(--supb)', c:'var(--sup)'},
     {v:nEntregas, l:'Entregas', bg:'var(--recb)', c:'var(--rec)'},
+    {v:nSalidas, l:'Salidas', bg:'var(--erb)', c:'var(--er)'},
     {v:nTransf, l:'Transferencias', bg:'var(--goldb)', c:'var(--des)'},
     {v:+totEntregado.toFixed(1), l:'Unid. ingresadas', bg:'var(--okb)', c:'var(--ok)'},
+    {v:+totSalido.toFixed(1), l:'Unid. salidas', bg:'var(--erb)', c:'var(--er)'},
     {v:Object.keys(prods).length, l:'Productos con mov.', bg:'var(--solb)', c:'var(--navy)'},
   ];
   document.getElementById('rep-kpis').innerHTML = kpis.map(k=>`
@@ -2597,7 +2653,7 @@ function renderReporte(){
   const body = document.getElementById('rep-body');
   const names = Object.keys(prods).sort();
   if(!names.length){
-    body.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--g4)">Sin movimientos en este periodo</td></tr>`;
+    body.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--g4)">Sin movimientos en este periodo</td></tr>`;
     return;
   }
   body.innerHTML = names.map(n=>{
@@ -2606,6 +2662,7 @@ function renderReporte(){
       <td style="font-size:12px;font-weight:600">${n}</td>
       <td style="font-size:11px;color:var(--g4);text-align:center">${p.unit}</td>
       <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:var(--rec)">${p.entregas?+p.entregas.toFixed(2):'—'}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:var(--er)">${p.salidas?'-'+ +p.salidas.toFixed(2):'—'}</td>
       <td style="text-align:right;font-family:'DM Mono',monospace;color:${p.transf<0?'var(--er)':'var(--sup)'}">${p.transf?(p.transf>0?'+':'')+ +p.transf.toFixed(2):'—'}</td>
       <td style="text-align:right;font-family:'DM Mono',monospace">${p.conteos||'—'}</td>
       <td style="text-align:right;font-family:'DM Mono',monospace;color:var(--sol)">${p.ultConteo===null?'—':p.ultConteo}</td>
@@ -2618,10 +2675,10 @@ function exportarReporteCSV(){
   const {tipo, ini, fin, prods} = datosReporte();
   const names = Object.keys(prods).sort();
   if(!names.length){ toast('Sin datos para exportar en este periodo'); return; }
-  const rows = [['Local','Periodo','Desde','Hasta','Producto','Unidad','Total Entregas','Total Transferencias','N° Conteos','Último Conteo','Fecha Último Conteo']];
+  const rows = [['Local','Periodo','Desde','Hasta','Producto','Unidad','Total Entregas','Total Salidas','Total Transferencias','N° Conteos','Último Conteo','Fecha Último Conteo']];
   names.forEach(n=>{
     const p = prods[n];
-    rows.push([SISTEMAS[sistema]?.nombre||sistema, tipo, ini, fin, n, p.unit, p.entregas, p.transf, p.conteos, p.ultConteo===null?'':p.ultConteo, p.ultFecha||'']);
+    rows.push([SISTEMAS[sistema]?.nombre||sistema, tipo, ini, fin, n, p.unit, p.entregas, p.salidas, p.transf, p.conteos, p.ultConteo===null?'':p.ultConteo, p.ultFecha||'']);
   });
   const csv = rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\n');
   const b = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});

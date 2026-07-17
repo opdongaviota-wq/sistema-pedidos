@@ -346,6 +346,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
 .mov-entrega{background:var(--recb);color:var(--rec)}
 .mov-transfer{background:var(--supb);color:var(--sup)}
 .mov-salida{background:var(--erb);color:var(--er)}
+.mov-merma{background:var(--goldb);color:var(--des)}
 .mov-btn{border:1px solid var(--g2);border-radius:6px;background:white;cursor:pointer;padding:3px 7px;font-size:13px;margin:0 2px}
 .mov-btn:hover{background:var(--g1)}
 </style>
@@ -661,7 +662,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
           </div>
         </div>
         <div style="margin-top:12px;font-size:12px;color:var(--g4);text-align:center">
-          💡 Stock estimado = último conteo registrado + entregas de pedidos − salidas ± transferencias posteriores a ese conteo.
+          💡 Stock estimado = último conteo registrado + entregas de pedidos − salidas − mermas ± transferencias posteriores a ese conteo.
         </div>
       </div>
 
@@ -675,6 +676,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
                 <select id="reg-tipo" style="width:100%;padding:8px 11px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px;font-family:inherit" onchange="cambioTipoRegistro()">
                   <option value="conteo">📆 Conteo (stock contado)</option>
                   <option value="salida">📤 Salida (descuenta del stock)</option>
+                  <option value="merma">⚠️ Merma (pérdida, descuenta del stock)</option>
                 </select>
               </div>
               <div class="mf" style="margin:0;flex:1;min-width:170px">
@@ -704,7 +706,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
           </div>
         </div>
         <div style="margin-top:12px;font-size:12px;color:var(--g4);text-align:center">
-          💡 <strong>Conteo</strong>: uno por día y por local; si ya existe, al guardar se actualiza. <strong>Salida</strong>: descuenta del stock; puedes registrar varias en un mismo día (consumo, mermas, etc.).
+          💡 <strong>Conteo</strong>: uno por día y por local; si ya existe, al guardar se actualiza. <strong>Salida</strong>: consumo normal, descuenta del stock. <strong>Merma</strong>: pérdidas (vencimiento, daño), también descuenta y se reporta por separado. De ambas puedes registrar varias por día.
         </div>
       </div>
 
@@ -766,6 +768,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
                 <th>Producto</th><th>Unidad</th>
                 <th style="text-align:right">Σ Entregas</th>
                 <th style="text-align:right">Σ Salidas</th>
+                <th style="text-align:right">Σ Mermas</th>
                 <th style="text-align:right">Σ Transf. (±)</th>
                 <th style="text-align:right">N° conteos</th>
                 <th style="text-align:right">Último conteo</th>
@@ -2123,7 +2126,7 @@ function puedeRegistrarConteo(){ return ['solicitante','supervisor'].includes(se
 function puedeEditarMov(m){
   const r = session?.role;
   if(r === 'supervisor') return true;
-  if(r === 'solicitante' && ['conteo','salida'].includes(m.tipo)) return true;
+  if(r === 'solicitante' && ['conteo','salida','merma'].includes(m.tipo)) return true;
   return false;
 }
 
@@ -2230,10 +2233,12 @@ function cargarConteoFecha(){
   const badge = document.getElementById('conteo-estado-badge');
   const tipo = tipoRegistroActual();
 
-  if(tipo === 'salida'){
-    document.getElementById('btn-guardar-conteo').textContent='💾 Registrar salida';
-    const salidasDia = invMovs.filter(m=>m.tipo==='salida' && m.fecha===fecha).length;
-    badge.innerHTML = `<span style="background:var(--erb);color:var(--er);border:1px solid var(--g2);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700">📤 Las cantidades se descuentan del stock${salidasDia?' — '+salidasDia+' salida'+(salidasDia>1?'s':'')+' ya registrada'+(salidasDia>1?'s':'')+' este día':''}</span>`;
+  if(tipo === 'salida' || tipo === 'merma'){
+    const esMerma = tipo === 'merma';
+    document.getElementById('btn-guardar-conteo').textContent = esMerma ? '💾 Registrar merma' : '💾 Registrar salida';
+    const delDia = invMovs.filter(m=>m.tipo===tipo && m.fecha===fecha).length;
+    const nombre = esMerma ? 'merma' : 'salida';
+    badge.innerHTML = `<span style="background:${esMerma?'var(--goldb)':'var(--erb)'};color:${esMerma?'var(--des)':'var(--er)'};border:1px solid var(--g2);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700">${esMerma?'⚠️':'📤'} Las cantidades se descuentan del stock${delDia?' — '+delDia+' '+nombre+(delDia>1?'s':'')+' ya registrada'+(delDia>1?'s':'')+' este día':''}</span>`;
     renderFormItems([]);
     return;
   }
@@ -2316,10 +2321,11 @@ async function guardarConteo(){
     return;
   }
 
-  // Salida: cada guardado inserta un movimiento nuevo (pueden haber varias por día)
-  if(tipoRegistroActual() === 'salida'){
+  // Salida o merma: cada guardado inserta un movimiento nuevo (pueden haber varias por día)
+  const tipoReg = tipoRegistroActual();
+  if(tipoReg === 'salida' || tipoReg === 'merma'){
     const mov = {
-      id: invUUID(), sistema, fecha, tipo:'salida', origen:null,
+      id: invUUID(), sistema, fecha, tipo: tipoReg, origen:null,
       usuario: session?.name||'', items,
       created_at:new Date().toISOString(), updated_at:new Date().toISOString(),
     };
@@ -2359,7 +2365,7 @@ async function persistirMovimiento(mov, op){
         .update({fecha:mov.fecha, items:mov.items, usuario:mov.usuario, updated_at:mov.updated_at}).eq('id',mov.id));
       hideLoading();
       if(error) throw error;
-      const nombreTipo = {conteo:'Conteo', salida:'Salida', entrega:'Entrega', transferencia:'Transferencia'}[mov.tipo]||'Movimiento';
+      const nombreTipo = {conteo:'Conteo', salida:'Salida', merma:'Merma', entrega:'Entrega', transferencia:'Transferencia'}[mov.tipo]||'Movimiento';
       toast(op==='insert' ? '✅ '+nombreTipo+' guardado en la nube — '+fmtFecha(mov.fecha) : '✅ Movimiento actualizado — '+fmtFecha(mov.fecha));
     }catch(e){
       hideLoading();
@@ -2432,7 +2438,9 @@ function renderMovimientos(){
         ? `<span class="mov-pill mov-transfer">🔄 Transferencia</span>`
         : m.tipo==='salida'
           ? `<span class="mov-pill mov-salida">📤 Salida</span>`
-          : `<span class="mov-pill mov-entrega">🚚 Entrega</span>`;
+          : m.tipo==='merma'
+            ? `<span class="mov-pill mov-merma">⚠️ Merma</span>`
+            : `<span class="mov-pill mov-entrega">🚚 Entrega</span>`;
     const acciones = puedeEditarMov(m)
       ? `<button class="mov-btn" title="Editar" onclick="event.stopPropagation();editarMovimiento('${m.id}')">✏️</button>
          <button class="mov-btn" title="Eliminar" onclick="event.stopPropagation();eliminarMovimiento('${m.id}')">🗑️</button>`
@@ -2470,13 +2478,13 @@ function editarMovimiento(id){
   invEditId = id;
   switchInvTab('conteo');
   const sel = document.getElementById('reg-tipo');
-  if(['conteo','salida'].includes(mov.tipo)) sel.value = mov.tipo;
+  if(['conteo','salida','merma'].includes(mov.tipo)) sel.value = mov.tipo;
   sel.disabled = true; // el tipo no cambia al editar
   document.getElementById('conteo-fecha').value = mov.fecha;
   document.getElementById('conteo-estado-badge').innerHTML='';
   const banner = document.getElementById('conteo-edit-banner');
   banner.style.display='block';
-  const tipoTxt = {conteo:'conteo', entrega:'entrega', transferencia:'transferencia', salida:'salida'}[mov.tipo]||mov.tipo;
+  const tipoTxt = {conteo:'conteo', entrega:'entrega', transferencia:'transferencia', salida:'salida', merma:'merma'}[mov.tipo]||mov.tipo;
   banner.innerHTML = `✏️ Editando ${tipoTxt} del ${fmtFecha(mov.fecha)}${mov.origen?' — '+mov.origen:''}. Ajusta cantidades y guarda.`;
   document.getElementById('btn-guardar-conteo').textContent='💾 Guardar cambios';
   document.getElementById('btn-cancelar-edicion').style.display='';
@@ -2497,6 +2505,7 @@ async function eliminarMovimiento(id){
   if(!puedeEditarMov(mov)){ toast('No tienes permiso para eliminar este movimiento'); return; }
   const desc = mov.tipo==='conteo' ? 'el conteo del '+fmtFecha(mov.fecha)
     : mov.tipo==='salida' ? 'la salida del '+fmtFecha(mov.fecha)
+    : mov.tipo==='merma' ? 'la merma del '+fmtFecha(mov.fecha)
     : mov.tipo==='transferencia' ? 'la transferencia '+(mov.origen||'')+' del '+fmtFecha(mov.fecha)
     : 'la entrega '+(mov.origen||'')+' del '+fmtFecha(mov.fecha);
   if(!confirm('¿Eliminar '+desc+'?')) return;
@@ -2540,7 +2549,7 @@ function calcularStock(){
       if(!p.unit && i.unit) p.unit = i.unit;
       if(m.tipo==='conteo'){
         p.conteo = cant; p.fechaConteo = m.fecha; p.entregas = 0; // el conteo reinicia la base
-      } else if(m.tipo==='salida'){
+      } else if(m.tipo==='salida' || m.tipo==='merma'){
         p.entregas -= cant;
       } else {
         p.entregas += cant;
@@ -2610,11 +2619,12 @@ function datosReporte(){
   orden.forEach(m=>{
     (m.items||[]).forEach(i=>{
       const cant = parseFloat(i.cantidad)||0;
-      if(!prods[i.name]) prods[i.name]={unit:i.unit||'', entregas:0, salidas:0, transf:0, conteos:0, ultConteo:null, ultFecha:null};
+      if(!prods[i.name]) prods[i.name]={unit:i.unit||'', entregas:0, salidas:0, mermas:0, transf:0, conteos:0, ultConteo:null, ultFecha:null};
       const p = prods[i.name];
       if(!p.unit && i.unit) p.unit = i.unit;
       if(m.tipo==='entrega') p.entregas += cant;
       else if(m.tipo==='salida') p.salidas += cant;
+      else if(m.tipo==='merma') p.mermas += cant;
       else if(m.tipo==='transferencia') p.transf += cant;
       else { p.conteos++; p.ultConteo = cant; p.ultFecha = m.fecha; }
     });
@@ -2629,19 +2639,24 @@ function renderReporte(){
   const nConteos = movs.filter(m=>m.tipo==='conteo').length;
   const nEntregas = movs.filter(m=>m.tipo==='entrega').length;
   const nSalidas = movs.filter(m=>m.tipo==='salida').length;
+  const nMermas = movs.filter(m=>m.tipo==='merma').length;
   const nTransf = movs.filter(m=>m.tipo==='transferencia').length;
   const totEntregado = movs.filter(m=>m.tipo==='entrega')
     .reduce((s,m)=>s+(m.items||[]).reduce((a,i)=>a+(parseFloat(i.cantidad)||0),0),0);
   const totSalido = movs.filter(m=>m.tipo==='salida')
+    .reduce((s,m)=>s+(m.items||[]).reduce((a,i)=>a+(parseFloat(i.cantidad)||0),0),0);
+  const totMermado = movs.filter(m=>m.tipo==='merma')
     .reduce((s,m)=>s+(m.items||[]).reduce((a,i)=>a+(parseFloat(i.cantidad)||0),0),0);
   const kpis = [
     {v:movs.length, l:'Movimientos', bg:'var(--solb)', c:'var(--sol)'},
     {v:nConteos, l:'Conteos', bg:'var(--supb)', c:'var(--sup)'},
     {v:nEntregas, l:'Entregas', bg:'var(--recb)', c:'var(--rec)'},
     {v:nSalidas, l:'Salidas', bg:'var(--erb)', c:'var(--er)'},
+    {v:nMermas, l:'Mermas', bg:'var(--goldb)', c:'var(--des)'},
     {v:nTransf, l:'Transferencias', bg:'var(--goldb)', c:'var(--des)'},
     {v:+totEntregado.toFixed(1), l:'Unid. ingresadas', bg:'var(--okb)', c:'var(--ok)'},
     {v:+totSalido.toFixed(1), l:'Unid. salidas', bg:'var(--erb)', c:'var(--er)'},
+    {v:+totMermado.toFixed(1), l:'Unid. mermadas', bg:'var(--goldb)', c:'var(--des)'},
     {v:Object.keys(prods).length, l:'Productos con mov.', bg:'var(--solb)', c:'var(--navy)'},
   ];
   document.getElementById('rep-kpis').innerHTML = kpis.map(k=>`
@@ -2653,7 +2668,7 @@ function renderReporte(){
   const body = document.getElementById('rep-body');
   const names = Object.keys(prods).sort();
   if(!names.length){
-    body.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--g4)">Sin movimientos en este periodo</td></tr>`;
+    body.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--g4)">Sin movimientos en este periodo</td></tr>`;
     return;
   }
   body.innerHTML = names.map(n=>{
@@ -2663,6 +2678,7 @@ function renderReporte(){
       <td style="font-size:11px;color:var(--g4);text-align:center">${p.unit}</td>
       <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:var(--rec)">${p.entregas?+p.entregas.toFixed(2):'—'}</td>
       <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:var(--er)">${p.salidas?'-'+ +p.salidas.toFixed(2):'—'}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:var(--des)">${p.mermas?'-'+ +p.mermas.toFixed(2):'—'}</td>
       <td style="text-align:right;font-family:'DM Mono',monospace;color:${p.transf<0?'var(--er)':'var(--sup)'}">${p.transf?(p.transf>0?'+':'')+ +p.transf.toFixed(2):'—'}</td>
       <td style="text-align:right;font-family:'DM Mono',monospace">${p.conteos||'—'}</td>
       <td style="text-align:right;font-family:'DM Mono',monospace;color:var(--sol)">${p.ultConteo===null?'—':p.ultConteo}</td>
@@ -2675,10 +2691,10 @@ function exportarReporteCSV(){
   const {tipo, ini, fin, prods} = datosReporte();
   const names = Object.keys(prods).sort();
   if(!names.length){ toast('Sin datos para exportar en este periodo'); return; }
-  const rows = [['Local','Periodo','Desde','Hasta','Producto','Unidad','Total Entregas','Total Salidas','Total Transferencias','N° Conteos','Último Conteo','Fecha Último Conteo']];
+  const rows = [['Local','Periodo','Desde','Hasta','Producto','Unidad','Total Entregas','Total Salidas','Total Mermas','Total Transferencias','N° Conteos','Último Conteo','Fecha Último Conteo']];
   names.forEach(n=>{
     const p = prods[n];
-    rows.push([SISTEMAS[sistema]?.nombre||sistema, tipo, ini, fin, n, p.unit, p.entregas, p.salidas, p.transf, p.conteos, p.ultConteo===null?'':p.ultConteo, p.ultFecha||'']);
+    rows.push([SISTEMAS[sistema]?.nombre||sistema, tipo, ini, fin, n, p.unit, p.entregas, p.salidas, p.mermas, p.transf, p.conteos, p.ultConteo===null?'':p.ultConteo, p.ultFecha||'']);
   });
   const csv = rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\n');
   const b = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});

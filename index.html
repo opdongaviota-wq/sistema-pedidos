@@ -348,6 +348,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
 .mov-transfer{background:var(--supb);color:var(--sup)}
 .mov-salida{background:var(--erb);color:var(--er)}
 .mov-merma{background:var(--goldb);color:var(--des)}
+.mov-entrada{background:var(--okb);color:var(--ok)}
+.mov-despacho{background:#e8e3f7;color:#5b3fa8}
 .mov-btn{border:1px solid var(--g2);border-radius:6px;background:white;cursor:pointer;padding:3px 7px;font-size:13px;margin:0 2px}
 .mov-btn:hover{background:var(--g1)}
 </style>
@@ -628,7 +630,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
           <div class="pt">📦 Inventario del Local</div>
           <div class="ps" id="inv-subtitle">Conteos diarios, entregas automáticas y reportes</div>
         </div>
-        <span id="inv-local-badge" style="font-size:12px;font-weight:700;color:var(--navy);background:var(--solb);border:1px solid var(--solbr);padding:4px 12px;border-radius:20px"></span>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <label id="inv-bodega-lbl" style="display:none;font-size:11px;font-weight:700;color:var(--g4);text-transform:uppercase;letter-spacing:.4px">Bodega</label>
+          <select id="inv-bodega" style="display:none;padding:6px 11px;border:1.5px solid var(--solbr);border-radius:20px;font-size:12px;font-weight:700;font-family:inherit;color:var(--navy);background:var(--solb);cursor:pointer" onchange="cambiarBodegaInv()"></select>
+          <span id="inv-local-badge" style="font-size:12px;font-weight:700;color:var(--navy);background:var(--solb);border:1px solid var(--solbr);padding:4px 12px;border-radius:20px"></span>
+        </div>
       </div>
 
       <!-- Banner de rol -->
@@ -665,7 +671,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
           </div>
         </div>
         <div style="margin-top:12px;font-size:12px;color:var(--g4);text-align:center">
-          💡 Stock estimado = último conteo registrado + entregas de pedidos − salidas − mermas ± transferencias posteriores a ese conteo.
+          💡 Stock estimado = último conteo + entradas y recepciones − despachos − salidas − mermas ± transferencias posteriores a ese conteo.
         </div>
       </div>
 
@@ -678,9 +684,14 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
                 <label>Tipo de registro</label>
                 <select id="reg-tipo" style="width:100%;padding:8px 11px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px;font-family:inherit" onchange="cambioTipoRegistro()">
                   <option value="conteo">📆 Conteo (stock contado)</option>
+                  <option value="entrada">📥 Entrada (compra a proveedor)</option>
                   <option value="salida">📤 Salida (descuenta del stock)</option>
                   <option value="merma">⚠️ Merma (pérdida, descuenta del stock)</option>
                 </select>
+              </div>
+              <div class="mf" id="reg-ref-wrap" style="margin:0;min-width:200px;display:none">
+                <label>Proveedor / N° documento</label>
+                <input type="text" id="reg-ref" maxlength="60" placeholder="Ej: Pesquera Sur — Guía 4471" style="width:100%;padding:8px 11px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px;font-family:inherit">
               </div>
               <div class="mf" style="margin:0;flex:1;min-width:170px">
                 <label>Fecha</label>
@@ -720,7 +731,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
           </div>
         </div>
         <div style="margin-top:12px;font-size:12px;color:var(--g4);text-align:center">
-          💡 <strong>Conteo</strong>: uno por día y por local; si ya existe, al guardar se actualiza. <strong>Salida</strong>: consumo normal, descuenta del stock. <strong>Merma</strong>: pérdidas (vencimiento, daño), también descuenta y se reporta por separado. De ambas puedes registrar varias por día.
+          💡 <strong>Conteo</strong>: uno por día y por bodega; si ya existe, al guardar se actualiza y fija la base del stock. <strong>Entrada</strong>: compra a proveedor, suma al stock (anota proveedor o N° de guía). <strong>Salida</strong>: consumo normal. <strong>Merma</strong>: pérdidas por vencimiento o daño. De entradas, salidas y mermas puedes registrar varias por día.
         </div>
       </div>
 
@@ -790,16 +801,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
           </div>
           <div class="card-body" style="padding:0;overflow-x:auto">
             <table class="dash-table">
-              <thead><tr>
-                <th>Producto</th><th>Categoría</th><th>Unidad</th>
-                <th style="text-align:right">Σ Entregas</th>
-                <th style="text-align:right">Σ Salidas</th>
-                <th style="text-align:right">Σ Mermas</th>
-                <th style="text-align:right">Σ Transf. (±)</th>
-                <th style="text-align:right">N° conteos</th>
-                <th style="text-align:right">Último conteo</th>
-                <th>Fecha último conteo</th>
-              </tr></thead>
+              <thead><tr id="rep-head"></tr></thead>
               <tbody id="rep-body"></tbody>
             </table>
           </div>
@@ -811,14 +813,20 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
         <div class="card" style="margin-bottom:14px">
           <div class="card-body" style="padding:14px 18px">
             <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-              <span id="cat-info" style="font-size:12px;font-weight:700;color:var(--navy);background:var(--solb);border:1px solid var(--solbr);padding:4px 12px;border-radius:20px"></span>
-              <div class="btn-row" style="margin-left:auto">
+              <div class="mf" style="margin:0;min-width:200px">
+                <label>Categoría</label>
+                <select id="cat-filtro" style="width:100%;padding:8px 11px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px;font-family:inherit" onchange="renderCatalogo()">
+                  <option value="todas">Todas las categorías</option>
+                </select>
+              </div>
+              <span id="cat-info" style="font-size:12px;font-weight:700;color:var(--navy);background:var(--solb);border:1px solid var(--solbr);padding:4px 12px;border-radius:20px;align-self:flex-end;margin-bottom:4px"></span>
+              <div class="btn-row" style="margin-left:auto;align-self:flex-end">
                 <button class="btn btn-navy btn-sm" onclick="descargarCatalogoExcel()">📥 Descargar Excel</button>
                 <button class="btn btn-ghost btn-sm" onclick="imprimirCatalogo()">🖨️ Imprimir</button>
               </div>
             </div>
-            <div style="margin-top:8px;font-size:11px;color:var(--g4)">
-              Catálogo vigente de este local, incluidos los productos agregados o editados desde Admin.
+            <div style="margin-top:8px;font-size:11px;color:var(--g4)" id="cat-nota">
+              Catálogo vigente de este local, incluidos los productos agregados o editados desde Admin. La descarga e impresión respetan la categoría seleccionada.
             </div>
           </div>
         </div>
@@ -2176,12 +2184,49 @@ function imprimirPedido(o) {
 // tipo: 'conteo' (registro absoluto diario) | 'entrega' (suma automática al marcar pedido Entregado)
 // ════════════════════════════════════════════════
 
-let invMovs = [];        // movimientos del sistema actual
+let invMovs = [];        // movimientos de la bodega seleccionada
 let invEditId = null;    // id del movimiento en edición (null = conteo nuevo/del día)
 let invLoaded = false;
+let invSistema = null;   // bodega que se está gestionando: el local o 'bodega_central'
+let CATS_BC = null;      // catálogo combinado para Bodega Central
 
-const INVMOV_CACHE = () => 'invmov_' + sistema;
-const INVMOV_PEND  = () => 'invmov_pend_' + sistema;
+const INVMOV_CACHE = () => 'invmov_' + (invSistema||sistema);
+const INVMOV_PEND  = () => 'invmov_pend_' + (invSistema||sistema);
+
+// Nombre legible de cualquier bodega (locales + Bodega Central)
+function nombreBodega(id){
+  return SISTEMAS[id]?.nombre || SISTEMAS_LIST.find(s=>s.id===id)?.nombre || id;
+}
+function icoBodega(id){
+  return SISTEMAS[id]?.ico || SISTEMAS_LIST.find(s=>s.id===id)?.ico || '📦';
+}
+function esBodegaCentral(){ return invSistema === 'bodega_central'; }
+
+// Catálogo a usar en el módulo de inventario.
+// Bodega Central abastece comedores y cocinas, así que trabaja con ambos catálogos unidos.
+function catsInv(){
+  if(!esBodegaCentral()) return CATS;
+  if(!CATS_BC){
+    const merge = {};
+    ['comedores','cocina'].forEach(t=>{
+      (CATS_BASE[t]||[]).forEach(c=>{
+        if(!merge[c.label]) merge[c.label] = {id:c.id, label:c.label, icon:c.icon, items:[]};
+        c.items.forEach(it=>{ if(!merge[c.label].items.some(x=>x.n===it.n)) merge[c.label].items.push({...it}); });
+      });
+    });
+    CATS_BC = Object.values(merge);
+    CATS_BC.forEach(c=>c.items.sort((a,b)=>a.n.localeCompare(b.n,'es',{sensitivity:'base'})));
+  }
+  return CATS_BC;
+}
+
+// Bodegas que el rol puede gestionar
+function bodegasDisponibles(){
+  const r = session?.role;
+  if(r === 'supervisor')  return [sistema, 'bodega_central'];
+  if(r === 'despachador') return ['bodega_central'];
+  return [sistema];
+}
 
 function invUUID(){
   return (crypto && crypto.randomUUID) ? crypto.randomUUID()
@@ -2203,18 +2248,42 @@ function invPendSave(q){ try{ localStorage.setItem(INVMOV_PEND(), JSON.stringify
 function invPendAdd(op){ const q = invPendGet(); q.push(op); invPendSave(q); }
 
 // ── Permisos ──
-function puedeRegistrarConteo(){ return ['solicitante','supervisor'].includes(session?.role); }
+// Cada rol registra en la bodega que le corresponde: el local al Solicitante,
+// Bodega Central al Despachador; el Supervisor en ambas.
+function puedeRegistrarConteo(){
+  const r = session?.role;
+  if(r === 'supervisor') return true;
+  if(esBodegaCentral())  return r === 'despachador';
+  return r === 'solicitante';
+}
 function puedeEditarMov(m){
   const r = session?.role;
   if(r === 'supervisor') return true;
-  if(r === 'solicitante' && ['conteo','salida','merma'].includes(m.tipo)) return true;
+  if(r === 'solicitante' && ['conteo','entrada','salida','merma'].includes(m.tipo)) return true;
   return false;
 }
 
 // ── Init ──
 async function initInventario(){
   const role = session?.role;
-  document.getElementById('inv-local-badge').textContent = SISTEMAS[sistema]?.nombre || sistema;
+  const bodegas = bodegasDisponibles();
+  if(!invSistema || !bodegas.includes(invSistema)) invSistema = bodegas[0];
+
+  // Selector de bodega (solo si hay más de una disponible)
+  const sel = document.getElementById('inv-bodega');
+  const lbl = document.getElementById('inv-bodega-lbl');
+  const badge = document.getElementById('inv-local-badge');
+  if(bodegas.length > 1){
+    sel.innerHTML = bodegas.map(b=>`<option value="${b}">${icoBodega(b)} ${nombreBodega(b)}</option>`).join('');
+    sel.value = invSistema;
+    sel.style.display=''; lbl.style.display=''; badge.style.display='none';
+  } else {
+    sel.style.display='none'; lbl.style.display='none'; badge.style.display='';
+    badge.textContent = icoBodega(invSistema)+' '+nombreBodega(invSistema);
+  }
+  document.getElementById('inv-subtitle').textContent = esBodegaCentral()
+    ? 'Inventario propio de Bodega Central — independiente de los locales'
+    : 'Conteos diarios, entregas automáticas y reportes';
 
   // Banner por rol
   const banner = document.getElementById('inv-role-banner');
@@ -2223,7 +2292,11 @@ async function initInventario(){
     despachador: { cls:'rb-des', ico:'📦', title:'Bodega Central', msg:'Vista de consulta — puedes revisar stock, movimientos y reportes del local.' },
     supervisor:  { cls:'rb-sup', ico:'🔑', title:'Supervisor', msg:'Acceso completo — registra conteos, edita o elimina movimientos y genera reportes por periodo.' },
   };
-  const m = msgs[role] || msgs.supervisor;
+  let m = msgs[role] || msgs.supervisor;
+  if(esBodegaCentral()){
+    m = { cls:'rb-des', ico:'📦', title:'Bodega Central',
+          msg:'Inventario propio de la bodega. Registra <strong>entradas de proveedor, conteos, salidas y mermas</strong>; los despachos a locales se descuentan solos. Nada de esto afecta el inventario de los locales.' };
+  }
   banner.className = 'role-banner ' + m.cls;
   banner.innerHTML = `<div class="rb-ico">${m.ico}</div><div><span class="rb-strong">${m.title}</span><span class="rb-text">${m.msg}</span></div>`;
 
@@ -2239,6 +2312,16 @@ async function initInventario(){
 
   await cargarMovimientos();
   switchInvTab('stock');
+}
+
+async function cambiarBodegaInv(){
+  const nuevo = document.getElementById('inv-bodega').value;
+  if(nuevo === invSistema) return;
+  invSistema = nuevo;
+  invEditId = null;
+  invMovs = []; invLoaded = false;
+  await initInventario();
+  toast(icoBodega(invSistema)+' Gestionando inventario de '+nombreBodega(invSistema));
 }
 
 function switchInvTab(n){
@@ -2261,7 +2344,7 @@ async function cargarMovimientos(){
     try{
       await syncPendingInvMovs();
       const { data, error } = await sbClient.from('inventario_movimientos')
-        .select('*').eq('sistema', sistema)
+        .select('*').eq('sistema', invSistema)
         .order('fecha',{ascending:false}).order('created_at',{ascending:false}).limit(1000);
       if(error) throw error;
       invMovs = data || [];
@@ -2373,7 +2456,7 @@ function filasPlanillaConteo(){
   const cat = document.getElementById('conteo-categoria')?.value || 'todas';
   const stock = calcularStock();
   const filas = [];
-  CATS.forEach(c=>{
+  catsInv().forEach(c=>{
     if(cat!=='todas' && c.label!==cat) return;
     c.items.forEach(it=>{
       const p = stock[it.n];
@@ -2390,7 +2473,7 @@ async function descargarPlanillaConteo(){
   const fecha = document.getElementById('conteo-fecha').value || hoyISO();
   const rows = [
     ['PLANILLA DE CONTEO DE INVENTARIO'],
-    ['Local:', SISTEMAS[sistema]?.nombre||sistema, '', 'Fecha:', fmtFecha(fecha)],
+    ['Bodega:', nombreBodega(invSistema), '', 'Fecha:', fmtFecha(fecha)],
     ['Categoría:', cat==='todas'?'Todas':cat, '', 'Responsable:', session?.name||''],
     [],
     ['Categoría','Producto','Unidad','Stock estimado','Conteo físico','Observación'],
@@ -2398,7 +2481,7 @@ async function descargarPlanillaConteo(){
   filas.forEach(f=>rows.push([f.categoria, f.producto, f.unidad, f.estimado, '', '']));
   await exportarExcel(
     [{nombre:'Conteo', filas:rows, anchos:[22,44,12,14,14,26]}],
-    'planilla_conteo_'+sistema+'_'+fecha+(cat==='todas'?'':'_'+cat.replace(/[^\w]/g,'_'))+'.xlsx'
+    'planilla_conteo_'+invSistema+'_'+fecha+(cat==='todas'?'':'_'+cat.replace(/[^\w]/g,'_'))+'.xlsx'
   );
 }
 
@@ -2423,7 +2506,7 @@ function imprimirPlanillaConteo(){
   });
   abrirVentanaImpresion('Planilla de conteo', `
     <h1>📦 Planilla de Conteo de Inventario</h1>
-    <div class="sub">${SISTEMAS[sistema]?.nombre||sistema} — ${cat==='todas'?'Todas las categorías':cat}</div>
+    <div class="sub">${nombreBodega(invSistema)} — ${cat==='todas'?'Todas las categorías':cat}</div>
     <div class="meta">
       <span><b>FECHA</b>${fmtFecha(fecha)}</span>
       <span><b>RESPONSABLE</b>${session?.name||'________________'}</span>
@@ -2446,7 +2529,7 @@ function poblarCategoriasConteo(){
   if(!sel) return;
   const actual = sel.value || 'todas';
   sel.innerHTML = '<option value="todas">Todas las categorías</option>' +
-    CATS.map(c=>`<option value="${c.label.replace(/"/g,'&quot;')}">${c.icon} ${c.label} (${c.items.length})</option>`).join('');
+    catsInv().map(c=>`<option value="${c.label.replace(/"/g,'&quot;')}">${c.icon} ${c.label} (${c.items.length})</option>`).join('');
   if([...sel.options].some(o=>o.value===actual)) sel.value = actual;
 }
 
@@ -2458,14 +2541,36 @@ function filtrarConteoCategoria(){
   });
 }
 
-// ── Catálogo vigente ──
+// ── Catálogo vigente (con filtro por categoría) ──
+function poblarFiltroCatalogo(){
+  const sel = document.getElementById('cat-filtro');
+  if(!sel) return;
+  const actual = sel.value || 'todas';
+  sel.innerHTML = '<option value="todas">Todas las categorías</option>' +
+    CATS.map(c=>`<option value="${c.label.replace(/"/g,'&quot;')}">${c.icon} ${c.label} (${c.items.length})</option>`).join('');
+  if([...sel.options].some(o=>o.value===actual)) sel.value = actual;
+}
+
+// Categorías del catálogo de pedidos según el filtro elegido
+function catalogoFiltrado(){
+  const cat = document.getElementById('cat-filtro')?.value || 'todas';
+  return { cat, cats: CATS.filter(c=>cat==='todas' || c.label===cat) };
+}
+
 function renderCatalogo(){
+  poblarFiltroCatalogo();
   const body = document.getElementById('cat-body');
-  const totalProd = CATS.reduce((s,c)=>s+c.items.length,0);
-  document.getElementById('cat-info').textContent =
-    `${CATS.length} categorías · ${totalProd} productos · ${SISTEMAS[sistema]?.nombre||sistema}`;
+  const { cat, cats } = catalogoFiltrado();
+  const totalProd = cats.reduce((s,c)=>s+c.items.length,0);
+  document.getElementById('cat-info').textContent = cat==='todas'
+    ? `${CATS.length} categorías · ${totalProd} productos · ${nombreBodega(sistema)}`
+    : `${cat} · ${totalProd} productos · ${nombreBodega(sistema)}`;
+  if(!cats.length){
+    body.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--g4)">Sin productos en esa categoría</td></tr>`;
+    return;
+  }
   let html = '', n = 0;
-  CATS.forEach(c=>{
+  cats.forEach(c=>{
     html += `<tr style="background:var(--g1)"><td colspan="4" style="font-weight:700;color:var(--navy);font-size:12px">${c.icon} ${c.label} — ${c.items.length} productos</td></tr>`;
     c.items.forEach(it=>{
       n++;
@@ -2481,26 +2586,31 @@ function renderCatalogo(){
 }
 
 async function descargarCatalogoExcel(){
+  const { cat, cats } = catalogoFiltrado();
+  if(!cats.length){ toast('No hay productos en esa categoría'); return; }
   const rows = [['N°','Categoría','ID categoría','Producto','Unidad']];
   let n = 0;
-  CATS.forEach(c=>c.items.forEach(it=>{ n++; rows.push([n, c.label, c.id, it.n, it.u]); }));
+  cats.forEach(c=>c.items.forEach(it=>{ n++; rows.push([n, c.label, c.id, it.n, it.u]); }));
   const resumen = [['CATÁLOGO DE PRODUCTOS'],
-    ['Local:', SISTEMAS[sistema]?.nombre||sistema],
+    ['Local:', nombreBodega(sistema)],
+    ['Categoría:', cat==='todas'?'Todas':cat],
     ['Generado:', fmtFecha(hoyISO())],
-    ['Categorías:', CATS.length],
+    ['Categorías:', cats.length],
     ['Productos:', n],
     [],
     ['Categoría','ID','Productos']];
-  CATS.forEach(c=>resumen.push([c.label, c.id, c.items.length]));
+  cats.forEach(c=>resumen.push([c.label, c.id, c.items.length]));
   await exportarExcel([
     {nombre:'Catálogo', filas:rows, anchos:[6,24,16,46,14]},
     {nombre:'Resumen', filas:resumen, anchos:[26,18,12]},
-  ], 'catalogo_'+sistema+'_'+hoyISO()+'.xlsx');
+  ], 'catalogo_'+sistema+(cat==='todas'?'':'_'+cat.replace(/[^\w]/g,'_'))+'_'+hoyISO()+'.xlsx');
 }
 
 function imprimirCatalogo(){
+  const { cat, cats } = catalogoFiltrado();
+  if(!cats.length){ toast('No hay productos en esa categoría'); return; }
   let cuerpo = '', n = 0;
-  CATS.forEach(c=>{
+  cats.forEach(c=>{
     cuerpo += `<tr class="cat"><td colspan="3">${c.icon} ${c.label.toUpperCase()} — ${c.items.length} productos</td></tr>`;
     c.items.forEach(it=>{
       n++;
@@ -2509,10 +2619,10 @@ function imprimirCatalogo(){
   });
   abrirVentanaImpresion('Catálogo de productos', `
     <h1>📋 Catálogo de Productos</h1>
-    <div class="sub">${SISTEMAS[sistema]?.nombre||sistema}</div>
+    <div class="sub">${nombreBodega(sistema)} — ${cat==='todas'?'Todas las categorías':cat}</div>
     <div class="meta">
       <span><b>GENERADO</b>${fmtFecha(hoyISO())}</span>
-      <span><b>CATEGORÍAS</b>${CATS.length}</span>
+      <span><b>CATEGORÍAS</b>${cats.length}</span>
       <span><b>PRODUCTOS</b>${n}</span>
     </div>
     <table><thead><tr><th style="width:12mm">N°</th><th>Producto</th><th style="width:22mm;text-align:center">Unidad</th></tr></thead>
@@ -2544,6 +2654,18 @@ function cargarConteoFecha(){
   const badge = document.getElementById('conteo-estado-badge');
   const tipo = tipoRegistroActual();
 
+  // Mostrar el campo de referencia solo para entradas
+  const refWrap = document.getElementById('reg-ref-wrap');
+  if(refWrap) refWrap.style.display = (tipo==='entrada') ? '' : 'none';
+
+  if(tipo === 'entrada'){
+    document.getElementById('btn-guardar-conteo').textContent='💾 Registrar entrada';
+    const delDia = invMovs.filter(m=>m.tipo==='entrada' && m.fecha===fecha).length;
+    badge.innerHTML = `<span style="background:var(--okb);color:var(--ok);border:1px solid var(--recbr);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700">📥 Las cantidades se suman al stock${delDia?' — '+delDia+' entrada'+(delDia>1?'s':'')+' ya registrada'+(delDia>1?'s':'')+' este día':''}</span>`;
+    renderFormItems([]);
+    return;
+  }
+
   if(tipo === 'salida' || tipo === 'merma'){
     const esMerma = tipo === 'merma';
     document.getElementById('btn-guardar-conteo').textContent = esMerma ? '💾 Registrar merma' : '💾 Registrar salida';
@@ -2569,7 +2691,7 @@ function renderFormItems(items){
   const map = {};
   (items||[]).forEach(i=>{ map[i.name] = {cantidad:i.cantidad, obs:i.obs||''}; });
   let html = '';
-  CATS.forEach(cat=>{
+  catsInv().forEach(cat=>{
     html += `<tr class="cat-row" data-cat="${cat.label.replace(/"/g,'&quot;')}"><td colspan="4" style="background:var(--g1);color:var(--g5)">${cat.icon} ${cat.label}</td></tr>`;
     cat.items.forEach(it=>{
       const key = it.n.replace(/[^a-z0-9]/gi,'_');
@@ -2588,7 +2710,7 @@ function renderFormItems(items){
   });
   body.innerHTML = html;
   // resaltar filas con valor
-  CATS.forEach(cat=>cat.items.forEach(it=>{
+  catsInv().forEach(cat=>cat.items.forEach(it=>{
     const key = it.n.replace(/[^a-z0-9]/gi,'_');
     hlCntRow(key, document.getElementById('cnt-'+key)?.value);
   }));
@@ -2602,7 +2724,7 @@ function hlCntRow(key, val){
 
 function recolectarItemsForm(){
   const items = [];
-  CATS.forEach(cat=>cat.items.forEach(it=>{
+  catsInv().forEach(cat=>cat.items.forEach(it=>{
     const key = it.n.replace(/[^a-z0-9]/gi,'_');
     const cantidad = parseFloat(document.getElementById('cnt-'+key)?.value||0)||0;
     const obs = document.getElementById('cntobs-'+key)?.value||'';
@@ -2625,7 +2747,7 @@ async function guardarConteo(){
     if(!mov){ toast('Movimiento no encontrado'); cancelarEdicionMov(); return; }
     if(!puedeEditarMov(mov)){ toast('No tienes permiso para editar este movimiento'); return; }
     // Conservar ítems fuera del catálogo actual (p. ej. productos eliminados del admin)
-    const nombresCat = new Set(); CATS.forEach(c=>c.items.forEach(i=>nombresCat.add(i.n)));
+    const nombresCat = new Set(); catsInv().forEach(c=>c.items.forEach(i=>nombresCat.add(i.n)));
     const extras = (mov.items||[]).filter(i=>!nombresCat.has(i.name));
     await persistirMovimiento({...mov, fecha, items:[...items,...extras], usuario:session?.name||mov.usuario, editado:true, updated_at:new Date().toISOString()}, 'update');
     cancelarEdicionMov();
@@ -2633,15 +2755,17 @@ async function guardarConteo(){
     return;
   }
 
-  // Salida o merma: cada guardado inserta un movimiento nuevo (pueden haber varias por día)
+  // Entrada, salida o merma: cada guardado inserta un movimiento nuevo (pueden haber varios por día)
   const tipoReg = tipoRegistroActual();
-  if(tipoReg === 'salida' || tipoReg === 'merma'){
+  if(['entrada','salida','merma'].includes(tipoReg)){
+    const ref = (document.getElementById('reg-ref')?.value||'').trim();
     const mov = {
-      id: invUUID(), sistema, fecha, tipo: tipoReg, origen:null,
+      id: invUUID(), sistema: invSistema, fecha, tipo: tipoReg, origen: (tipoReg==='entrada' ? (ref||null) : null),
       usuario: session?.name||'', items,
       created_at:new Date().toISOString(), updated_at:new Date().toISOString(),
     };
     await persistirMovimiento(mov, 'insert');
+    const inpRef = document.getElementById('reg-ref'); if(inpRef) inpRef.value='';
     cargarConteoFecha();
     return;
   }
@@ -2652,7 +2776,7 @@ async function guardarConteo(){
     await persistirMovimiento({...existente, items, usuario:session?.name||'', updated_at:new Date().toISOString()}, 'update');
   } else {
     const mov = {
-      id: invUUID(), sistema, fecha, tipo:'conteo', origen:null,
+      id: invUUID(), sistema: invSistema, fecha, tipo:'conteo', origen:null,
       usuario: session?.name||'', items,
       created_at:new Date().toISOString(), updated_at:new Date().toISOString(),
     };
@@ -2677,7 +2801,7 @@ async function persistirMovimiento(mov, op){
         .update({fecha:mov.fecha, items:mov.items, usuario:mov.usuario, editado:mov.editado===true, updated_at:mov.updated_at}).eq('id',mov.id));
       hideLoading();
       if(error) throw error;
-      const nombreTipo = {conteo:'Conteo', salida:'Salida', merma:'Merma', entrega:'Entrega', transferencia:'Transferencia'}[mov.tipo]||'Movimiento';
+      const nombreTipo = {conteo:'Conteo', entrada:'Entrada', salida:'Salida', merma:'Merma', entrega:'Entrega', despacho:'Despacho', transferencia:'Transferencia'}[mov.tipo]||'Movimiento';
       toast(op==='insert' ? '✅ '+nombreTipo+' guardado en la nube — '+fmtFecha(mov.fecha) : '✅ Movimiento actualizado — '+fmtFecha(mov.fecha));
     }catch(e){
       hideLoading();
@@ -2718,82 +2842,85 @@ function itemsRecibidos(order){
     }));
 }
 
-// Registra o actualiza el movimiento de entrada del pedido.
-// Se ejecuta en cada guardado: si el pedido se recibe por partes, el movimiento
-// se va actualizando. Si alguien editó el movimiento a mano, no se sobrescribe.
-async function registrarEntregaInventario(order){
-  const items = itemsRecibidos(order);
+// Registra, actualiza o retira el movimiento de inventario asociado a un pedido.
+// Sirve tanto para la ENTRADA al local (tipo 'entrega') como para la SALIDA
+// de Bodega Central (tipo 'despacho'). Se ejecuta en cada guardado, así que
+// una recepción por partes va actualizando el movimiento. Si alguien lo corrigió
+// a mano (editado = true), no se sobrescribe.
+async function registrarMovPedido(sistemaId, tipo, order, items, etiqueta){
+  if(!invLoaded && invSistema===sistemaId && !invMovs.length) invMovs = invCacheLoad();
+  const existente = await buscarMovPedido(sistemaId, tipo, order.folio);
 
-  // Asegurar caché cargada aunque nunca se haya abierto la pestaña
-  if(!invLoaded && !invMovs.length) invMovs = invCacheLoad();
-
-  const existente = invMovs.find(m=>m.tipo==='entrega' && m.origen===order.folio);
-
+  // ── Nada que registrar: retirar el movimiento automático si existía ──
   if(!items.length){
-    if(!existente) return;
-    // Ya no hay nada recibido (se revirtieron los estados): eliminar el movimiento automático
-    if(existente.editado) return;
-    invMovs = invMovs.filter(m=>m.id!==existente.id);
-    invCacheSave();
+    if(!existente || existente.editado) return;
+    invCacheRemoveFor(sistemaId, existente.id);
     if(!OFFLINE && sbClient){
       try{ await sbClient.from('inventario_movimientos').delete().eq('id',existente.id); }
-      catch(e){ invPendAdd({op:'delete', id:existente.id}); }
-    } else invPendAdd({op:'delete', id:existente.id});
+      catch(e){ invPendAddFor(sistemaId, {op:'delete', id:existente.id}); }
+    } else invPendAddFor(sistemaId, {op:'delete', id:existente.id});
     return;
   }
 
-  // ── Actualizar el movimiento existente ──
+  // ── Actualizar el existente ──
   if(existente){
-    if(existente.editado) return; // respeta la edición manual
-    const mismo = JSON.stringify(existente.items||[]) === JSON.stringify(items);
-    if(mismo) return;
+    if(existente.editado) return;
+    if(JSON.stringify(existente.items||[]) === JSON.stringify(items)) return;
     const actualizado = {...existente, items, updated_at:new Date().toISOString()};
-    const idx = invMovs.findIndex(m=>m.id===existente.id);
-    invMovs[idx] = actualizado; invCacheSave();
+    invCacheUpsertFor(sistemaId, actualizado);
     if(!OFFLINE && sbClient){
       try{
         const { error } = await sbClient.from('inventario_movimientos')
           .update({items, updated_at:actualizado.updated_at}).eq('id',existente.id);
         if(error) throw error;
-        toast('📦 Inventario actualizado con lo recibido de '+order.folio);
+        toast(etiqueta+' actualizado en '+nombreBodega(sistemaId)+' — '+order.folio);
       }catch(e){
-        invPendAdd({op:'update', id:existente.id, row:{items, updated_at:actualizado.updated_at}});
-        toast('📦 Recepción actualizada localmente');
+        invPendAddFor(sistemaId, {op:'update', id:existente.id, row:{items, updated_at:actualizado.updated_at}});
+        toast(etiqueta+' actualizado localmente');
       }
     } else {
-      invPendAdd({op:'update', id:existente.id, row:{items, updated_at:actualizado.updated_at}});
-      toast('📦 Recepción actualizada (local)');
+      invPendAddFor(sistemaId, {op:'update', id:existente.id, row:{items, updated_at:actualizado.updated_at}});
+      toast(etiqueta+' actualizado (local)');
     }
     return;
   }
 
-  // ── Crear el movimiento ──
+  // ── Crear ──
   const mov = {
-    id: invUUID(), sistema, fecha: hoyISO(), tipo:'entrega', origen:order.folio,
+    id: invUUID(), sistema: sistemaId, fecha: hoyISO(), tipo, origen:order.folio,
     usuario: session?.name||'', items, editado:false,
     created_at:new Date().toISOString(), updated_at:new Date().toISOString(),
   };
-
   if(!OFFLINE && sbClient){
     try{
-      // Evitar duplicado (nube)
-      const { data:ex } = await sbClient.from('inventario_movimientos')
-        .select('id').eq('sistema',sistema).eq('tipo','entrega').eq('origen',order.folio).limit(1);
-      if(ex && ex.length) return;
       const { error } = await sbClient.from('inventario_movimientos').insert(mov);
       if(error) throw error;
-      invMovs.unshift(mov); invCacheSave();
-      toast('📦 Inventario actualizado con la recepción '+order.folio);
+      invCacheUpsertFor(sistemaId, mov);
+      toast(etiqueta+' registrado en '+nombreBodega(sistemaId)+' — '+order.folio);
     }catch(e){
-      invPendAdd({op:'insert', row:mov});
-      invMovs.unshift(mov); invCacheSave();
-      toast('📦 Recepción registrada localmente — se sincronizará al reconectar');
+      invPendAddFor(sistemaId, {op:'insert', row:mov});
+      invCacheUpsertFor(sistemaId, mov);
+      toast(etiqueta+' registrado localmente — se sincronizará al reconectar');
     }
   } else {
-    invPendAdd({op:'insert', row:mov});
-    invMovs.unshift(mov); invCacheSave();
-    toast('📦 Recepción registrada en inventario (local)');
+    invPendAddFor(sistemaId, {op:'insert', row:mov});
+    invCacheUpsertFor(sistemaId, mov);
+    toast(etiqueta+' registrado (local)');
   }
+}
+
+// Lo que sale físicamente de Bodega Central: lo despachado por bodega.
+function itemsDespachados(order){
+  return (order.items||[])
+    .filter(it=>(parseFloat(it.delivered)||0)>0)
+    .map(it=>({name:it.name, unit:it.unit, cantidad:parseFloat(it.delivered)||0, obs:'Pedido '+order.folio+' → '+nombreBodega(sistema)}));
+}
+
+// Ciclo completo del pedido sobre el inventario:
+//   sale de Bodega Central (despacho)  →  entra al local (entrega)
+async function registrarEntregaInventario(order){
+  await registrarMovPedido(sistema, 'entrega', order, itemsRecibidos(order), '📦 Ingreso');
+  await registrarMovPedido('bodega_central', 'despacho', order, itemsDespachados(order), '🚛 Despacho');
 }
 
 // ════════════════════════════════════════════════
@@ -2807,15 +2934,17 @@ function renderMovimientos(){
     return;
   }
   body.innerHTML = invMovs.map(m=>{
-    const tipoPill = m.tipo==='conteo'
-      ? `<span class="mov-pill mov-conteo">📆 Conteo</span>`
-      : m.tipo==='transferencia'
-        ? `<span class="mov-pill mov-transfer">🔄 Transferencia</span>`
-        : m.tipo==='salida'
-          ? `<span class="mov-pill mov-salida">📤 Salida</span>`
-          : m.tipo==='merma'
-            ? `<span class="mov-pill mov-merma">⚠️ Merma</span>`
-            : `<span class="mov-pill mov-entrega">🚚 Entrega</span>`;
+    const PILLS = {
+      conteo:        ['mov-conteo',   '📆 Conteo'],
+      entrada:       ['mov-entrada',  '📥 Entrada'],
+      entrega:       ['mov-entrega',  '🚚 Entrega'],
+      despacho:      ['mov-despacho', '🚛 Despacho'],
+      salida:        ['mov-salida',   '📤 Salida'],
+      merma:         ['mov-merma',    '⚠️ Merma'],
+      transferencia: ['mov-transfer', '🔄 Transferencia'],
+    };
+    const [pillCls, pillTxt] = PILLS[m.tipo] || ['mov-entrega', m.tipo];
+    const tipoPill = `<span class="mov-pill ${pillCls}">${pillTxt}</span>`;
     const acciones = puedeEditarMov(m)
       ? `<button class="mov-btn" title="Editar" onclick="event.stopPropagation();editarMovimiento('${m.id}')">✏️</button>
          <button class="mov-btn" title="Eliminar" onclick="event.stopPropagation();eliminarMovimiento('${m.id}')">🗑️</button>`
@@ -2853,13 +2982,13 @@ function editarMovimiento(id){
   invEditId = id;
   switchInvTab('conteo');
   const sel = document.getElementById('reg-tipo');
-  if(['conteo','salida','merma'].includes(mov.tipo)) sel.value = mov.tipo;
+  if(['conteo','entrada','salida','merma'].includes(mov.tipo)) sel.value = mov.tipo;
   sel.disabled = true; // el tipo no cambia al editar
   document.getElementById('conteo-fecha').value = mov.fecha;
   document.getElementById('conteo-estado-badge').innerHTML='';
   const banner = document.getElementById('conteo-edit-banner');
   banner.style.display='block';
-  const tipoTxt = {conteo:'conteo', entrega:'entrega', transferencia:'transferencia', salida:'salida', merma:'merma'}[mov.tipo]||mov.tipo;
+  const tipoTxt = {conteo:'conteo', entrada:'entrada', entrega:'entrega', despacho:'despacho', transferencia:'transferencia', salida:'salida', merma:'merma'}[mov.tipo]||mov.tipo;
   banner.innerHTML = `✏️ Editando ${tipoTxt} del ${fmtFecha(mov.fecha)}${mov.origen?' — '+mov.origen:''}. Ajusta cantidades y guarda.`;
   document.getElementById('btn-guardar-conteo').textContent='💾 Guardar cambios';
   document.getElementById('btn-cancelar-edicion').style.display='';
@@ -2878,11 +3007,16 @@ async function eliminarMovimiento(id){
   const mov = invMovs.find(m=>m.id===id);
   if(!mov){ return; }
   if(!puedeEditarMov(mov)){ toast('No tienes permiso para eliminar este movimiento'); return; }
-  const desc = mov.tipo==='conteo' ? 'el conteo del '+fmtFecha(mov.fecha)
-    : mov.tipo==='salida' ? 'la salida del '+fmtFecha(mov.fecha)
-    : mov.tipo==='merma' ? 'la merma del '+fmtFecha(mov.fecha)
-    : mov.tipo==='transferencia' ? 'la transferencia '+(mov.origen||'')+' del '+fmtFecha(mov.fecha)
-    : 'la entrega '+(mov.origen||'')+' del '+fmtFecha(mov.fecha);
+  const DESCS = {
+    conteo:        'el conteo del ',
+    entrada:       'la entrada del ',
+    salida:        'la salida del ',
+    merma:         'la merma del ',
+    despacho:      'el despacho '+(mov.origen||'')+' del ',
+    transferencia: 'la transferencia '+(mov.origen||'')+' del ',
+    entrega:       'la entrega '+(mov.origen||'')+' del ',
+  };
+  const desc = (DESCS[mov.tipo]||'el movimiento del ') + fmtFecha(mov.fecha);
   if(!confirm('¿Eliminar '+desc+'?')) return;
 
   invMovs = invMovs.filter(m=>m.id!==id);
@@ -2924,10 +3058,10 @@ function calcularStock(){
       if(!p.unit && i.unit) p.unit = i.unit;
       if(m.tipo==='conteo'){
         p.conteo = cant; p.fechaConteo = m.fecha; p.entregas = 0; // el conteo reinicia la base
-      } else if(m.tipo==='salida' || m.tipo==='merma'){
+      } else if(m.tipo==='salida' || m.tipo==='merma' || m.tipo==='despacho'){
         p.entregas -= cant;
       } else {
-        p.entregas += cant;
+        p.entregas += cant;   // entrega, entrada, transferencia (ya viene con signo)
       }
     });
   });
@@ -2987,7 +3121,7 @@ function movsEnRango(ini, fin){
 // Mapa producto → categoría según el catálogo vigente
 function mapaProductoCategoria(){
   const map = {};
-  CATS.forEach(cat=>cat.items.forEach(it=>{ map[it.n] = cat.label; }));
+  catsInv().forEach(cat=>cat.items.forEach(it=>{ map[it.n] = cat.label; }));
   return map;
 }
 
@@ -2995,7 +3129,7 @@ function poblarFiltrosReporte(){
   const selCat = document.getElementById('rep-categoria');
   const catActual = selCat.value || 'todas';
   selCat.innerHTML = '<option value="todas">Todas las categorías</option>' +
-    CATS.map(c=>`<option value="${c.label.replace(/"/g,'&quot;')}">${c.icon} ${c.label}</option>`).join('');
+    catsInv().map(c=>`<option value="${c.label.replace(/"/g,'&quot;')}">${c.icon} ${c.label}</option>`).join('');
   if([...selCat.options].some(o=>o.value===catActual)) selCat.value = catActual;
   poblarProductosReporte();
 }
@@ -3006,7 +3140,7 @@ function poblarProductosReporte(){
   const prodActual = selProd.value || 'todos';
   // Productos del catálogo (según categoría) + productos históricos en movimientos que ya no estén en el catálogo
   const nombres = new Set();
-  CATS.forEach(c=>{ if(cat==='todas' || c.label===cat) c.items.forEach(it=>nombres.add(it.n)); });
+  catsInv().forEach(c=>{ if(cat==='todas' || c.label===cat) c.items.forEach(it=>nombres.add(it.n)); });
   if(cat==='todas') invMovs.forEach(m=>(m.items||[]).forEach(i=>nombres.add(i.name)));
   const lista = [...nombres].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
   selProd.innerHTML = '<option value="todos">Todos los productos</option>' +
@@ -3044,10 +3178,12 @@ function datosReporte(){
   orden.forEach(m=>{
     (m.items||[]).forEach(i=>{
       const cant = parseFloat(i.cantidad)||0;
-      if(!prods[i.name]) prods[i.name]={unit:i.unit||'', entregas:0, salidas:0, mermas:0, transf:0, conteos:0, ultConteo:null, ultFecha:null};
+      if(!prods[i.name]) prods[i.name]={unit:i.unit||'', entradas:0, entregas:0, despachos:0, salidas:0, mermas:0, transf:0, conteos:0, ultConteo:null, ultFecha:null};
       const p = prods[i.name];
       if(!p.unit && i.unit) p.unit = i.unit;
       if(m.tipo==='entrega') p.entregas += cant;
+      else if(m.tipo==='entrada') p.entradas += cant;
+      else if(m.tipo==='despacho') p.despachos += cant;
       else if(m.tipo==='salida') p.salidas += cant;
       else if(m.tipo==='merma') p.mermas += cant;
       else if(m.tipo==='transferencia') p.transf += cant;
@@ -3057,43 +3193,83 @@ function datosReporte(){
   return {tipo, ini, fin, movs, prods};
 }
 
+// Columnas de movimiento del reporte, según la bodega gestionada.
+// Bodega Central compra y despacha; los locales reciben pedidos y consumen.
+function columnasReporte(){
+  const col = (k,l,signo,color)=>({k,l,signo,color});
+  return esBodegaCentral()
+    ? [ col('entradas','Σ Entradas','+','var(--ok)'),
+        col('despachos','Σ Despachos','-','#5b3fa8'),
+        col('salidas','Σ Salidas','-','var(--er)'),
+        col('mermas','Σ Mermas','-','var(--des)'),
+        col('transf','Σ Transf. (±)','±','var(--sup)') ]
+    : [ col('entregas','Σ Entregas','+','var(--rec)'),
+        col('entradas','Σ Entradas','+','var(--ok)'),
+        col('salidas','Σ Salidas','-','var(--er)'),
+        col('mermas','Σ Mermas','-','var(--des)'),
+        col('transf','Σ Transf. (±)','±','var(--sup)') ];
+}
+
+function celdaReporte(p, c){
+  const v = p[c.k]||0;
+  if(!v) return `<td style="text-align:right;font-family:'DM Mono',monospace;color:var(--g4)">—</td>`;
+  const txt = c.signo==='-' ? '-'+ +v.toFixed(2)
+            : c.signo==='±' ? (v>0?'+':'')+ +v.toFixed(2)
+            : +v.toFixed(2);
+  const color = (c.signo==='±' && v<0) ? 'var(--er)' : c.color;
+  return `<td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:${color}">${txt}</td>`;
+}
+
 function renderReporte(){
   const {ini, fin, movs, prods} = datosReporte();
   document.getElementById('rep-rango').textContent = ini===fin ? fmtFecha(ini) : fmtFecha(ini)+' → '+fmtFecha(fin);
 
-  const nConteos = movs.filter(m=>m.tipo==='conteo').length;
-  const nEntregas = movs.filter(m=>m.tipo==='entrega').length;
-  const nSalidas = movs.filter(m=>m.tipo==='salida').length;
-  const nMermas = movs.filter(m=>m.tipo==='merma').length;
-  const nTransf = movs.filter(m=>m.tipo==='transferencia').length;
-  const totEntregado = movs.filter(m=>m.tipo==='entrega')
-    .reduce((s,m)=>s+(m.items||[]).reduce((a,i)=>a+(parseFloat(i.cantidad)||0),0),0);
-  const totSalido = movs.filter(m=>m.tipo==='salida')
-    .reduce((s,m)=>s+(m.items||[]).reduce((a,i)=>a+(parseFloat(i.cantidad)||0),0),0);
-  const totMermado = movs.filter(m=>m.tipo==='merma')
-    .reduce((s,m)=>s+(m.items||[]).reduce((a,i)=>a+(parseFloat(i.cantidad)||0),0),0);
+  const nDe = t => movs.filter(m=>m.tipo===t).length;
+  const uDe = t => +movs.filter(m=>m.tipo===t)
+    .reduce((s,m)=>s+(m.items||[]).reduce((a,i)=>a+Math.abs(parseFloat(i.cantidad)||0),0),0).toFixed(1);
+
   const kpis = [
     {v:movs.length, l:'Movimientos', bg:'var(--solb)', c:'var(--sol)'},
-    {v:nConteos, l:'Conteos', bg:'var(--supb)', c:'var(--sup)'},
-    {v:nEntregas, l:'Entregas', bg:'var(--recb)', c:'var(--rec)'},
-    {v:nSalidas, l:'Salidas', bg:'var(--erb)', c:'var(--er)'},
-    {v:nMermas, l:'Mermas', bg:'var(--goldb)', c:'var(--des)'},
-    {v:nTransf, l:'Transferencias', bg:'var(--goldb)', c:'var(--des)'},
-    {v:+totEntregado.toFixed(1), l:'Unid. ingresadas', bg:'var(--okb)', c:'var(--ok)'},
-    {v:+totSalido.toFixed(1), l:'Unid. salidas', bg:'var(--erb)', c:'var(--er)'},
-    {v:+totMermado.toFixed(1), l:'Unid. mermadas', bg:'var(--goldb)', c:'var(--des)'},
-    {v:Object.keys(prods).length, l:'Productos con mov.', bg:'var(--solb)', c:'var(--navy)'},
+    {v:nDe('conteo'), l:'Conteos', bg:'var(--supb)', c:'var(--sup)'},
   ];
+  if(esBodegaCentral()){
+    kpis.push(
+      {v:nDe('entrada'),  l:'Entradas',        bg:'var(--okb)',   c:'var(--ok)'},
+      {v:uDe('entrada'),  l:'Unid. compradas', bg:'var(--okb)',   c:'var(--ok)'},
+      {v:nDe('despacho'), l:'Despachos',       bg:'#e8e3f7',      c:'#5b3fa8'},
+      {v:uDe('despacho'), l:'Unid. despachadas',bg:'#e8e3f7',     c:'#5b3fa8'},
+    );
+  } else {
+    kpis.push(
+      {v:nDe('entrega'),  l:'Recepciones',      bg:'var(--recb)', c:'var(--rec)'},
+      {v:uDe('entrega'),  l:'Unid. ingresadas', bg:'var(--okb)',  c:'var(--ok)'},
+    );
+    if(nDe('entrada')) kpis.push({v:uDe('entrada'), l:'Unid. compradas', bg:'var(--okb)', c:'var(--ok)'});
+  }
+  kpis.push(
+    {v:nDe('salida'), l:'Salidas',        bg:'var(--erb)',   c:'var(--er)'},
+    {v:uDe('salida'), l:'Unid. salidas',  bg:'var(--erb)',   c:'var(--er)'},
+    {v:nDe('merma'),  l:'Mermas',         bg:'var(--goldb)', c:'var(--des)'},
+    {v:uDe('merma'),  l:'Unid. mermadas', bg:'var(--goldb)', c:'var(--des)'},
+    {v:Object.keys(prods).length, l:'Productos con mov.', bg:'var(--solb)', c:'var(--navy)'},
+  );
   document.getElementById('rep-kpis').innerHTML = kpis.map(k=>`
     <div class="kpi-card" style="background:${k.bg}">
       <div class="kpi-val" style="color:${k.c}">${k.v}</div>
       <div class="kpi-lbl" style="color:${k.c}">${k.l}</div>
     </div>`).join('');
 
+  const cols = columnasReporte();
+  document.getElementById('rep-head').innerHTML =
+    '<th>Producto</th><th>Categoría</th><th>Unidad</th>' +
+    cols.map(c=>`<th style="text-align:right">${c.l}</th>`).join('') +
+    '<th style="text-align:right">N° conteos</th><th style="text-align:right">Último conteo</th><th>Fecha último conteo</th>';
+
   const body = document.getElementById('rep-body');
   const names = Object.keys(prods).sort();
+  const nCols = 6 + cols.length;
   if(!names.length){
-    body.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--g4)">Sin movimientos con estos filtros en el periodo</td></tr>`;
+    body.innerHTML = `<tr><td colspan="${nCols}" style="text-align:center;padding:20px;color:var(--g4)">Sin movimientos con estos filtros en el periodo</td></tr>`;
     return;
   }
   const mapaCat = mapaProductoCategoria();
@@ -3103,10 +3279,7 @@ function renderReporte(){
       <td style="font-size:12px;font-weight:600">${n}</td>
       <td style="font-size:11px;color:var(--g4)">${mapaCat[n]||'—'}</td>
       <td style="font-size:11px;color:var(--g4);text-align:center">${p.unit}</td>
-      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:var(--rec)">${p.entregas?+p.entregas.toFixed(2):'—'}</td>
-      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:var(--er)">${p.salidas?'-'+ +p.salidas.toFixed(2):'—'}</td>
-      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:var(--des)">${p.mermas?'-'+ +p.mermas.toFixed(2):'—'}</td>
-      <td style="text-align:right;font-family:'DM Mono',monospace;color:${p.transf<0?'var(--er)':'var(--sup)'}">${p.transf?(p.transf>0?'+':'')+ +p.transf.toFixed(2):'—'}</td>
+      ${cols.map(c=>celdaReporte(p,c)).join('')}
       <td style="text-align:right;font-family:'DM Mono',monospace">${p.conteos||'—'}</td>
       <td style="text-align:right;font-family:'DM Mono',monospace;color:var(--sol)">${p.ultConteo===null?'—':p.ultConteo}</td>
       <td style="font-size:11px;color:var(--g4)">${p.ultFecha?fmtFecha(p.ultFecha):'—'}</td>
@@ -3119,15 +3292,20 @@ function exportarReporteCSV(){
   const names = Object.keys(prods).sort();
   if(!names.length){ toast('Sin datos para exportar en este periodo'); return; }
   const mapaCat = mapaProductoCategoria();
-  const rows = [['Local','Periodo','Desde','Hasta','Categoría','Producto','Unidad','Total Entregas','Total Salidas','Total Mermas','Total Transferencias','N° Conteos','Último Conteo','Fecha Último Conteo']];
+  const cols = columnasReporte();
+  const rows = [['Bodega','Periodo','Desde','Hasta','Categoría','Producto','Unidad',
+    ...cols.map(c=>c.l.replace('Σ ','Total ')),
+    'N° Conteos','Último Conteo','Fecha Último Conteo']];
   names.forEach(n=>{
     const p = prods[n];
-    rows.push([SISTEMAS[sistema]?.nombre||sistema, tipo, ini, fin, mapaCat[n]||'', n, p.unit, p.entregas, p.salidas, p.mermas, p.transf, p.conteos, p.ultConteo===null?'':p.ultConteo, p.ultFecha||'']);
+    rows.push([nombreBodega(invSistema), tipo, ini, fin, mapaCat[n]||'', n, p.unit,
+      ...cols.map(c=>p[c.k]||0),
+      p.conteos, p.ultConteo===null?'':p.ultConteo, p.ultFecha||'']);
   });
   const csv = rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\n');
   const b = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
   const u = URL.createObjectURL(b); const a = document.createElement('a');
-  a.href=u; a.download='inventario_'+sistema+'_'+tipo+'_'+ini+'.csv'; a.click(); URL.revokeObjectURL(u);
+  a.href=u; a.download='inventario_'+invSistema+'_'+tipo+'_'+ini+'.csv'; a.click(); URL.revokeObjectURL(u);
   toast('✅ Reporte exportado a CSV');
 }
 // ════════════════════════════════════════════════
@@ -3307,7 +3485,7 @@ async function guardarTransferencia(){
 async function actualizarInventarioTr(sistemaId, items, signo, folioTr){
   // Registrar la transferencia como movimiento de inventario del local afectado
   // signo -1 = salida (origen), +1 = ingreso (destino)
-  if(sistemaId === 'bodega_central') return; // Bodega Central no lleva inventario por local
+  // Bodega Central también lleva su propio inventario, así que se registra igual
   try {
     const mov = {
       id: invUUID(), sistema: sistemaId, fecha: hoyISO(),
@@ -3318,8 +3496,7 @@ async function actualizarInventarioTr(sistemaId, items, signo, folioTr){
     };
     const { error } = await sbClient.from('inventario_movimientos').insert(mov);
     if(error) throw error;
-    // Si afecta al local actual, reflejar en caché local
-    if(sistemaId === sistema){ invMovs.unshift(mov); invCacheSave(); }
+    invCacheUpsertFor(sistemaId, mov);
   } catch(e){
     console.warn('No se pudo registrar movimiento de inventario para '+sistemaId, e);
   }

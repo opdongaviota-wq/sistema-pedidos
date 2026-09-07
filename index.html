@@ -184,6 +184,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
 .prod-input.inp-sol{background:#d6eaff;border-color:#5a9fd4;color:#0a3d6b}
 .prod-input.inp-sol:focus{border-color:var(--sol)}
 .prod-input.inp-des{background:#ffe8b0;border-color:#c8930a;color:#5a3300}
+.prod-input.inp-rec{background:#e6f4ea;border-color:#3f9a63;color:#14532d;font-size:11px}
 .prod-input.inp-des:focus{border-color:var(--des)}
 .prod-input:disabled{background:var(--g1);color:var(--g4);border-color:var(--g2);cursor:not-allowed;font-weight:400}
 .prod-input.has-val{font-weight:800}
@@ -578,6 +579,34 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
           </table>
         </div>
       </div>
+
+      <!-- ── SUB: CATÁLOGO ── -->
+      <div id="inv-sub-catalogo" style="display:none">
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-body" style="padding:14px 18px">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <span id="cat-info" style="font-size:12px;font-weight:700;color:var(--navy);background:var(--solb);border:1px solid var(--solbr);padding:4px 12px;border-radius:20px"></span>
+              <div class="btn-row" style="margin-left:auto">
+                <button class="btn btn-navy btn-sm" onclick="descargarCatalogoExcel()">📥 Descargar Excel</button>
+                <button class="btn btn-ghost btn-sm" onclick="imprimirCatalogo()">🖨️ Imprimir</button>
+              </div>
+            </div>
+            <div style="margin-top:8px;font-size:11px;color:var(--g4)">
+              Catálogo vigente de este local, incluidos los productos agregados o editados desde Admin.
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-body" style="padding:0;overflow-x:auto">
+            <table class="dash-table">
+              <thead><tr>
+                <th style="width:50px">N°</th><th>Categoría</th><th>Producto</th><th>Unidad</th>
+              </tr></thead>
+              <tbody id="cat-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ══ DASHBOARD ══ -->
@@ -638,6 +667,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
         <button class="inv-subtab" data-invtab="conteo" id="inv-tab-conteo" onclick="switchInvTab('conteo')">📝 Conteo / Salida</button>
         <button class="inv-subtab" data-invtab="movs" onclick="switchInvTab('movs')">📜 Movimientos</button>
         <button class="inv-subtab" data-invtab="reporte" onclick="switchInvTab('reporte')">📊 Reporte</button>
+        <button class="inv-subtab" data-invtab="catalogo" onclick="switchInvTab('catalogo')">📋 Catálogo</button>
       </div>
 
       <!-- ── SUB: STOCK ACTUAL ── -->
@@ -683,11 +713,22 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
                 <label>Fecha</label>
                 <input type="date" id="conteo-fecha" style="width:100%;padding:8px 11px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px;font-family:inherit" onchange="cargarConteoFecha()">
               </div>
+              <div class="mf" style="margin:0;min-width:190px">
+                <label>Categoría a contar</label>
+                <select id="conteo-categoria" style="width:100%;padding:8px 11px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px;font-family:inherit" onchange="filtrarConteoCategoria()">
+                  <option value="todas">Todas las categorías</option>
+                </select>
+              </div>
               <div id="conteo-estado-badge" style="font-size:12px;padding-bottom:6px"></div>
               <div class="btn-row" style="padding-bottom:2px">
                 <button class="btn btn-navy btn-sm" id="btn-guardar-conteo" onclick="guardarConteo()">💾 Guardar conteo</button>
                 <button class="btn btn-ghost btn-sm" id="btn-cancelar-edicion" style="display:none" onclick="cancelarEdicionMov()">✖ Cancelar edición</button>
               </div>
+            </div>
+            <div class="btn-row" style="margin-top:10px;border-top:1px solid var(--g2);padding-top:10px">
+              <button class="btn btn-ghost btn-sm" onclick="descargarPlanillaConteo()">📥 Planilla Excel</button>
+              <button class="btn btn-ghost btn-sm" onclick="imprimirPlanillaConteo()">🖨️ Imprimir planilla</button>
+              <span style="font-size:11px;color:var(--g4);align-self:center">Respeta la categoría seleccionada</span>
             </div>
             <div id="conteo-edit-banner" style="display:none;margin-top:10px;font-size:12px;font-weight:600;color:var(--des);background:var(--goldb);border:1px solid var(--desbr);border-radius:8px;padding:8px 12px"></div>
           </div>
@@ -751,6 +792,18 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
                 <label>Fecha de referencia</label>
                 <input type="date" id="rep-fecha" style="width:100%;padding:8px 11px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px;font-family:inherit" onchange="renderReporte()">
               </div>
+              <div class="mf" style="margin:0;min-width:180px">
+                <label>Categoría</label>
+                <select id="rep-categoria" style="width:100%;padding:8px 11px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px;font-family:inherit" onchange="cambioCategoriaReporte()">
+                  <option value="todas">Todas las categorías</option>
+                </select>
+              </div>
+              <div class="mf" style="margin:0;min-width:200px">
+                <label>Producto</label>
+                <select id="rep-producto" style="width:100%;padding:8px 11px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px;font-family:inherit" onchange="renderReporte()">
+                  <option value="todos">Todos los productos</option>
+                </select>
+              </div>
               <span id="rep-rango" style="font-size:12px;font-weight:700;color:var(--navy);background:var(--solb);border:1px solid var(--solbr);padding:4px 12px;border-radius:20px;margin-bottom:4px"></span>
               <button class="btn btn-ghost btn-sm" style="margin-bottom:2px" onclick="exportarReporteCSV()">📄 CSV</button>
             </div>
@@ -765,7 +818,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
           <div class="card-body" style="padding:0;overflow-x:auto">
             <table class="dash-table">
               <thead><tr>
-                <th>Producto</th><th>Unidad</th>
+                <th>Producto</th><th>Categoría</th><th>Unidad</th>
                 <th style="text-align:right">Σ Entregas</th>
                 <th style="text-align:right">Σ Salidas</th>
                 <th style="text-align:right">Σ Mermas</th>
@@ -1591,8 +1644,9 @@ async function saveForm() {
   saveLocalOrders(orders);
   renderHist();
 
-  // Registro automático en inventario al pasar a "Entregado"
-  if(data.estado==='entregado' && prevEstado!=='entregado'){
+  // Registro automático en inventario: incluye recepciones parciales.
+  // Se ejecuta en cada guardado desde que el pedido está despachado en adelante.
+  if(['despachado','entregado','cerrado'].includes(data.estado)){
     registrarEntregaInventario(data);
   }
 
@@ -1705,12 +1759,13 @@ function renderProds() {
         <td style="text-align:center"><div class="prod-unit">${it.u}</div></td>
         <td style="text-align:center"><input type="number" min="0" class="prod-input inp-sol" id="ask-${key}" ${canAsk?'':'disabled'} placeholder="0" oninput="updSum();hlRow('${key}')"></td>
         <td style="text-align:center"><input type="number" min="0" class="prod-input inp-des" id="del-${key}" ${canDel?'':'disabled'} placeholder="0" oninput="updSum();hlRow('${key}')"></td>
-        <td style="text-align:center"><select class="est-sel" id="est-${key}" ${canStat?'':'disabled'} onchange="updEst(this);hlRow('${key}')">
+        <td style="text-align:center"><select class="est-sel" id="est-${key}" ${canStat?'':'disabled'} onchange="updEst(this,'${key}');hlRow('${key}')">
           <option value="pendiente">— Pendiente —</option>
           <option value="completo">✅ Completo</option>
           <option value="parcial">⚠️ Parcial</option>
           <option value="pendiente_entrega">⏳ Pendiente entrega</option>
-        </select></td>
+        </select>
+        <input type="number" min="0" step="0.1" class="prod-input inp-rec" id="rcv-${key}" style="display:none;margin-top:4px;max-width:110px" ${canStat?'':'disabled'} placeholder="Recibido" title="Cantidad realmente recibida" oninput="updSum()"></td>
         <td><input type="text" class="obs-inp" id="obs-${key}" placeholder="Obs…"></td>
       </tr>`;
     });
@@ -1719,11 +1774,28 @@ function renderProds() {
   updSum();
 }
 
-function updEst(sel){
+function updEst(sel,key){
   sel.className='est-sel';
   if(sel.value==='completo')sel.classList.add('s-completo');
   else if(sel.value==='parcial')sel.classList.add('s-parcial');
   else if(sel.value==='pendiente_entrega')sel.classList.add('s-pendiente-ent');
+  if(key) toggleRecibido(key, sel.value);
+}
+
+// El campo "Recibido" solo aplica a los ítems marcados como Parcial
+function toggleRecibido(key, estado){
+  const inp = document.getElementById('rcv-'+key);
+  if(!inp) return;
+  if(estado==='parcial'){
+    inp.style.display='';
+    if(!inp.value){
+      const d = document.getElementById('del-'+key)?.value;
+      if(d) inp.placeholder = 'de '+d;
+    }
+  } else {
+    inp.style.display='none';
+    inp.value='';
+  }
 }
 function hlRow(key){
   const row=document.getElementById('row-'+key);if(!row)return;
@@ -1768,7 +1840,10 @@ function collectData(){
     const d=parseFloat(document.getElementById('del-'+key)?.value||0)||0;
     const s=document.getElementById('est-'+key)?.value||'pendiente';
     const o=document.getElementById('obs-'+key)?.value||'';
-    if(a||d||o)items.push({cat:cat.label,name:it.n,unit:it.u,asked:a,delivered:d,status:s,obs:o});
+    const rv=parseFloat(document.getElementById('rcv-'+key)?.value||'');
+    const item={cat:cat.label,name:it.n,unit:it.u,asked:a,delivered:d,status:s,obs:o};
+    if(s==='parcial' && !isNaN(rv)) item.received=rv;
+    if(a||d||o)items.push(item);
   }));
   return {
     folio,fecha:document.getElementById('m-fecha').value,
@@ -1792,6 +1867,7 @@ function newForm(){
     const key=`${cat.id}_${i}`;
     ['ask-','del-'].forEach(p=>{const e=document.getElementById(p+key);if(e)e.value='';});
     const s=document.getElementById('est-'+key);if(s){s.value='pendiente';s.className='est-sel';}
+    const rv=document.getElementById('rcv-'+key);if(rv){rv.value='';rv.style.display='none';}
     const o=document.getElementById('obs-'+key);if(o)o.value='';
     const r=document.getElementById('row-'+key);if(r)r.style.background='';
   }));
@@ -1820,7 +1896,9 @@ function loadOrderData(o){
     const key=`${cat.id}_${i}`;
     const a=document.getElementById('ask-'+key);const d=document.getElementById('del-'+key);
     const s=document.getElementById('est-'+key);const ob=document.getElementById('obs-'+key);
+    const rv=document.getElementById('rcv-'+key);
     if(a)a.value='';if(d)d.value='';if(s){s.value='pendiente';s.className='est-sel';}if(ob)ob.value='';
+    if(rv){rv.value='';rv.style.display='none';}
     document.getElementById('row-'+key)?.style.setProperty('background','');
   }));
   (o.items||[]).forEach(oi=>{
@@ -1831,7 +1909,9 @@ function loadOrderData(o){
         const s=document.getElementById('est-'+key);const ob=document.getElementById('obs-'+key);
         if(a){a.value=oi.asked||'';a.classList.toggle('has-val',oi.asked>0);}
         if(d)d.value=oi.delivered||'';
-        if(s){s.value=oi.status||'pendiente';updEst(s);}
+        if(s){s.value=oi.status||'pendiente';updEst(s,key);}
+        const rv=document.getElementById('rcv-'+key);
+        if(rv && oi.status==='parcial' && oi.received!==undefined && oi.received!==null) rv.value=oi.received;
         if(ob)ob.value=oi.obs||'';
         hlRow(key);
       }
@@ -2149,6 +2229,9 @@ async function initInventario(){
   // Sub-pestaña de conteo solo para quienes pueden registrar
   document.getElementById('inv-tab-conteo').style.display = puedeRegistrarConteo() ? '' : 'none';
 
+  // Filtro de categorías del conteo
+  poblarCategoriasConteo();
+
   // Fechas por defecto
   document.getElementById('conteo-fecha').value = hoyISO();
   document.getElementById('rep-fecha').value = hoyISO();
@@ -2159,14 +2242,15 @@ async function initInventario(){
 
 function switchInvTab(n){
   document.querySelectorAll('.inv-subtab').forEach(b=>b.classList.toggle('active', b.dataset.invtab===n));
-  ['stock','conteo','movs','reporte'].forEach(t=>{
+  ['stock','conteo','movs','reporte','catalogo'].forEach(t=>{
     const el = document.getElementById('inv-sub-'+t);
     if(el) el.style.display = t===n ? '' : 'none';
   });
   if(n==='stock') renderStockActual();
   if(n==='conteo'){ if(!invEditId) cargarConteoFecha(); }
   if(n==='movs') renderMovimientos();
-  if(n==='reporte') renderReporte();
+  if(n==='reporte'){ poblarFiltrosReporte(); renderReporte(); }
+  if(n==='catalogo') renderCatalogo();
 }
 
 // ── Carga desde Supabase (con caché y cola offline) ──
@@ -2206,6 +2290,232 @@ async function syncPendingInvMovs(){
   }
   invPendSave(rest);
   if(q.length && !rest.length) toast('☁️ Movimientos de inventario sincronizados');
+}
+
+// ════════════════════════════════════════════════
+// EXPORTACIÓN A EXCEL E IMPRESIÓN
+// ════════════════════════════════════════════════
+
+// Carga SheetJS bajo demanda (si falla, se usa CSV como respaldo)
+async function ensureXLSX(){
+  if(window.XLSX) return true;
+  try{
+    showLoading('Preparando Excel…');
+    await loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+    hideLoading();
+    return !!window.XLSX;
+  }catch(e){
+    hideLoading();
+    return false;
+  }
+}
+
+function descargarBlob(blob, filename){
+  const u = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = u; a.download = filename; a.click();
+  URL.revokeObjectURL(u);
+}
+
+function descargarCSVFilas(rows, filename){
+  const csv = rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\n');
+  descargarBlob(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}), filename);
+}
+
+// Genera un xlsx a partir de hojas [{nombre, filas, anchos}] — con respaldo a CSV
+async function exportarExcel(hojas, filename){
+  const ok = await ensureXLSX();
+  if(!ok){
+    descargarCSVFilas(hojas[0].filas, filename.replace(/\.xlsx$/,'.csv'));
+    toast('📄 Sin conexión para generar Excel — se descargó en CSV');
+    return;
+  }
+  const wb = XLSX.utils.book_new();
+  hojas.forEach(h=>{
+    const ws = XLSX.utils.aoa_to_sheet(h.filas);
+    if(h.anchos) ws['!cols'] = h.anchos.map(w=>({wch:w}));
+    XLSX.utils.book_append_sheet(wb, ws, h.nombre.substring(0,31));
+  });
+  XLSX.writeFile(wb, filename);
+  toast('✅ Excel descargado');
+}
+
+function abrirVentanaImpresion(titulo, cuerpoHTML){
+  const w = window.open('', '_blank');
+  if(!w){ toast('Permite las ventanas emergentes para imprimir'); return; }
+  w.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>${titulo}</title>
+  <style>
+    @page{size:A4 portrait;margin:12mm 10mm}
+    *{box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1a1a1a;margin:0}
+    h1{font-size:15pt;margin:0 0 2mm}
+    .sub{font-size:9pt;color:#555;margin-bottom:4mm}
+    .meta{display:flex;gap:14mm;font-size:9pt;margin-bottom:4mm}
+    .meta b{display:block;font-size:8pt;color:#666;font-weight:600}
+    table{width:100%;border-collapse:collapse;font-size:9pt}
+    th{background:#1B3A5C;color:white;padding:1.6mm 2mm;text-align:left;font-size:8.5pt;border:.3mm solid #1B3A5C}
+    td{padding:1.5mm 2mm;border:.3mm solid #bbb}
+    tr.cat td{background:#EDF2F7;font-weight:700;font-size:9pt;color:#1B3A5C}
+    tbody tr:nth-child(even) td{background:#fafafa}
+    tr.cat td{background:#EDF2F7 !important}
+    .celda-vacia{background:#fffdf5 !important}
+    .firma{margin-top:8mm;display:flex;gap:20mm;font-size:9pt}
+    .firma div{flex:1;border-top:.4mm solid #333;padding-top:1.5mm;text-align:center;color:#555}
+    @media print{.noprint{display:none}}
+  </style></head><body>${cuerpoHTML}
+  <script>window.onload=()=>{window.print();}<\/script></body></html>`);
+  w.document.close();
+}
+
+// ── Planilla de conteo (Excel / impresión) ──
+function filasPlanillaConteo(){
+  const cat = document.getElementById('conteo-categoria')?.value || 'todas';
+  const stock = calcularStock();
+  const filas = [];
+  CATS.forEach(c=>{
+    if(cat!=='todas' && c.label!==cat) return;
+    c.items.forEach(it=>{
+      const p = stock[it.n];
+      const estimado = p ? +(((p.conteo||0)+p.entregas).toFixed(2)) : '';
+      filas.push({categoria:c.label, icon:c.icon, producto:it.n, unidad:it.u, estimado});
+    });
+  });
+  return {cat, filas};
+}
+
+async function descargarPlanillaConteo(){
+  const {cat, filas} = filasPlanillaConteo();
+  if(!filas.length){ toast('No hay productos para esa categoría'); return; }
+  const fecha = document.getElementById('conteo-fecha').value || hoyISO();
+  const rows = [
+    ['PLANILLA DE CONTEO DE INVENTARIO'],
+    ['Local:', SISTEMAS[sistema]?.nombre||sistema, '', 'Fecha:', fmtFecha(fecha)],
+    ['Categoría:', cat==='todas'?'Todas':cat, '', 'Responsable:', session?.name||''],
+    [],
+    ['Categoría','Producto','Unidad','Stock estimado','Conteo físico','Observación'],
+  ];
+  filas.forEach(f=>rows.push([f.categoria, f.producto, f.unidad, f.estimado, '', '']));
+  await exportarExcel(
+    [{nombre:'Conteo', filas:rows, anchos:[22,44,12,14,14,26]}],
+    'planilla_conteo_'+sistema+'_'+fecha+(cat==='todas'?'':'_'+cat.replace(/[^\w]/g,'_'))+'.xlsx'
+  );
+}
+
+function imprimirPlanillaConteo(){
+  const {cat, filas} = filasPlanillaConteo();
+  if(!filas.length){ toast('No hay productos para esa categoría'); return; }
+  const fecha = document.getElementById('conteo-fecha').value || hoyISO();
+  let cuerpo = '';
+  let catActual = null;
+  filas.forEach(f=>{
+    if(f.categoria!==catActual){
+      catActual = f.categoria;
+      cuerpo += `<tr class="cat"><td colspan="5">${f.icon} ${f.categoria.toUpperCase()}</td></tr>`;
+    }
+    cuerpo += `<tr>
+      <td>${f.producto}</td>
+      <td style="text-align:center">${f.unidad}</td>
+      <td style="text-align:right;font-family:monospace">${f.estimado===''?'—':f.estimado}</td>
+      <td class="celda-vacia" style="width:24mm"></td>
+      <td class="celda-vacia" style="width:38mm"></td>
+    </tr>`;
+  });
+  abrirVentanaImpresion('Planilla de conteo', `
+    <h1>📦 Planilla de Conteo de Inventario</h1>
+    <div class="sub">${SISTEMAS[sistema]?.nombre||sistema} — ${cat==='todas'?'Todas las categorías':cat}</div>
+    <div class="meta">
+      <span><b>FECHA</b>${fmtFecha(fecha)}</span>
+      <span><b>RESPONSABLE</b>${session?.name||'________________'}</span>
+      <span><b>PRODUCTOS</b>${filas.length}</span>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Producto</th><th style="width:18mm;text-align:center">Unidad</th>
+        <th style="width:22mm;text-align:right">Stock sist.</th>
+        <th style="width:24mm">Conteo físico</th><th style="width:38mm">Observación</th>
+      </tr></thead>
+      <tbody>${cuerpo}</tbody>
+    </table>
+    <div class="firma"><div>Contado por</div><div>Revisado por</div></div>`);
+}
+
+// ── Filtro de categorías en el formulario de conteo ──
+function poblarCategoriasConteo(){
+  const sel = document.getElementById('conteo-categoria');
+  if(!sel) return;
+  const actual = sel.value || 'todas';
+  sel.innerHTML = '<option value="todas">Todas las categorías</option>' +
+    CATS.map(c=>`<option value="${c.label.replace(/"/g,'&quot;')}">${c.icon} ${c.label} (${c.items.length})</option>`).join('');
+  if([...sel.options].some(o=>o.value===actual)) sel.value = actual;
+}
+
+function filtrarConteoCategoria(){
+  const cat = document.getElementById('conteo-categoria').value;
+  document.querySelectorAll('#conteo-body tr').forEach(tr=>{
+    const suCat = tr.dataset.cat;
+    tr.style.display = (cat==='todas' || suCat===cat) ? '' : 'none';
+  });
+}
+
+// ── Catálogo vigente ──
+function renderCatalogo(){
+  const body = document.getElementById('cat-body');
+  const totalProd = CATS.reduce((s,c)=>s+c.items.length,0);
+  document.getElementById('cat-info').textContent =
+    `${CATS.length} categorías · ${totalProd} productos · ${SISTEMAS[sistema]?.nombre||sistema}`;
+  let html = '', n = 0;
+  CATS.forEach(c=>{
+    html += `<tr style="background:var(--g1)"><td colspan="4" style="font-weight:700;color:var(--navy);font-size:12px">${c.icon} ${c.label} — ${c.items.length} productos</td></tr>`;
+    c.items.forEach(it=>{
+      n++;
+      html += `<tr>
+        <td style="text-align:center;font-family:'DM Mono',monospace;font-size:11px;color:var(--g4)">${n}</td>
+        <td style="font-size:11px;color:var(--g4)">${c.label}</td>
+        <td style="font-size:12px;font-weight:600">${it.n}</td>
+        <td style="font-size:11px;color:var(--g4);text-align:center">${it.u}</td>
+      </tr>`;
+    });
+  });
+  body.innerHTML = html;
+}
+
+async function descargarCatalogoExcel(){
+  const rows = [['N°','Categoría','ID categoría','Producto','Unidad']];
+  let n = 0;
+  CATS.forEach(c=>c.items.forEach(it=>{ n++; rows.push([n, c.label, c.id, it.n, it.u]); }));
+  const resumen = [['CATÁLOGO DE PRODUCTOS'],
+    ['Local:', SISTEMAS[sistema]?.nombre||sistema],
+    ['Generado:', fmtFecha(hoyISO())],
+    ['Categorías:', CATS.length],
+    ['Productos:', n],
+    [],
+    ['Categoría','ID','Productos']];
+  CATS.forEach(c=>resumen.push([c.label, c.id, c.items.length]));
+  await exportarExcel([
+    {nombre:'Catálogo', filas:rows, anchos:[6,24,16,46,14]},
+    {nombre:'Resumen', filas:resumen, anchos:[26,18,12]},
+  ], 'catalogo_'+sistema+'_'+hoyISO()+'.xlsx');
+}
+
+function imprimirCatalogo(){
+  let cuerpo = '', n = 0;
+  CATS.forEach(c=>{
+    cuerpo += `<tr class="cat"><td colspan="3">${c.icon} ${c.label.toUpperCase()} — ${c.items.length} productos</td></tr>`;
+    c.items.forEach(it=>{
+      n++;
+      cuerpo += `<tr><td style="text-align:center;width:12mm">${n}</td><td>${it.n}</td><td style="text-align:center;width:22mm">${it.u}</td></tr>`;
+    });
+  });
+  abrirVentanaImpresion('Catálogo de productos', `
+    <h1>📋 Catálogo de Productos</h1>
+    <div class="sub">${SISTEMAS[sistema]?.nombre||sistema}</div>
+    <div class="meta">
+      <span><b>GENERADO</b>${fmtFecha(hoyISO())}</span>
+      <span><b>CATEGORÍAS</b>${CATS.length}</span>
+      <span><b>PRODUCTOS</b>${n}</span>
+    </div>
+    <table><thead><tr><th style="width:12mm">N°</th><th>Producto</th><th style="width:22mm;text-align:center">Unidad</th></tr></thead>
+    <tbody>${cuerpo}</tbody></table>`);
 }
 
 // ════════════════════════════════════════════════
@@ -2259,11 +2569,11 @@ function renderFormItems(items){
   (items||[]).forEach(i=>{ map[i.name] = {cantidad:i.cantidad, obs:i.obs||''}; });
   let html = '';
   CATS.forEach(cat=>{
-    html += `<tr class="cat-row"><td colspan="4" style="background:var(--g1);color:var(--g5)">${cat.icon} ${cat.label}</td></tr>`;
+    html += `<tr class="cat-row" data-cat="${cat.label.replace(/"/g,'&quot;')}"><td colspan="4" style="background:var(--g1);color:var(--g5)">${cat.icon} ${cat.label}</td></tr>`;
     cat.items.forEach(it=>{
       const key = it.n.replace(/[^a-z0-9]/gi,'_');
       const val = map[it.n] || {cantidad:'', obs:''};
-      html += `<tr class="prod-row" id="cnt-row-${key}">
+      html += `<tr class="prod-row" id="cnt-row-${key}" data-cat="${cat.label.replace(/"/g,'&quot;')}">
         <td><div class="prod-name">${it.n}</div></td>
         <td style="text-align:center"><div class="prod-unit">${it.u}</div></td>
         <td style="text-align:center">
@@ -2281,6 +2591,7 @@ function renderFormItems(items){
     const key = it.n.replace(/[^a-z0-9]/gi,'_');
     hlCntRow(key, document.getElementById('cnt-'+key)?.value);
   }));
+  filtrarConteoCategoria();
 }
 
 function hlCntRow(key, val){
@@ -2315,7 +2626,7 @@ async function guardarConteo(){
     // Conservar ítems fuera del catálogo actual (p. ej. productos eliminados del admin)
     const nombresCat = new Set(); CATS.forEach(c=>c.items.forEach(i=>nombresCat.add(i.n)));
     const extras = (mov.items||[]).filter(i=>!nombresCat.has(i.name));
-    await persistirMovimiento({...mov, fecha, items:[...items,...extras], usuario:session?.name||mov.usuario, updated_at:new Date().toISOString()}, 'update');
+    await persistirMovimiento({...mov, fecha, items:[...items,...extras], usuario:session?.name||mov.usuario, editado:true, updated_at:new Date().toISOString()}, 'update');
     cancelarEdicionMov();
     switchInvTab('movs');
     return;
@@ -2362,18 +2673,18 @@ async function persistirMovimiento(mov, op){
       let error;
       if(op==='insert') ({error} = await sbClient.from('inventario_movimientos').insert(mov));
       else ({error} = await sbClient.from('inventario_movimientos')
-        .update({fecha:mov.fecha, items:mov.items, usuario:mov.usuario, updated_at:mov.updated_at}).eq('id',mov.id));
+        .update({fecha:mov.fecha, items:mov.items, usuario:mov.usuario, editado:mov.editado===true, updated_at:mov.updated_at}).eq('id',mov.id));
       hideLoading();
       if(error) throw error;
       const nombreTipo = {conteo:'Conteo', salida:'Salida', merma:'Merma', entrega:'Entrega', transferencia:'Transferencia'}[mov.tipo]||'Movimiento';
       toast(op==='insert' ? '✅ '+nombreTipo+' guardado en la nube — '+fmtFecha(mov.fecha) : '✅ Movimiento actualizado — '+fmtFecha(mov.fecha));
     }catch(e){
       hideLoading();
-      invPendAdd(op==='insert' ? {op:'insert', row:mov} : {op:'update', id:mov.id, row:{fecha:mov.fecha, items:mov.items, usuario:mov.usuario, updated_at:mov.updated_at}});
+      invPendAdd(op==='insert' ? {op:'insert', row:mov} : {op:'update', id:mov.id, row:{fecha:mov.fecha, items:mov.items, usuario:mov.usuario, editado:mov.editado===true, updated_at:mov.updated_at}});
       toast('💾 Guardado localmente — se sincronizará al reconectar');
     }
   } else {
-    invPendAdd(op==='insert' ? {op:'insert', row:mov} : {op:'update', id:mov.id, row:{fecha:mov.fecha, items:mov.items, usuario:mov.usuario, updated_at:mov.updated_at}});
+    invPendAdd(op==='insert' ? {op:'insert', row:mov} : {op:'update', id:mov.id, row:{fecha:mov.fecha, items:mov.items, usuario:mov.usuario, editado:mov.editado===true, updated_at:mov.updated_at}});
     toast('💾 Movimiento guardado localmente');
   }
 }
@@ -2381,21 +2692,84 @@ async function persistirMovimiento(mov, op){
 // ════════════════════════════════════════════════
 // 2) REGISTRO AUTOMÁTICO AL MARCAR "ENTREGADO"
 // ════════════════════════════════════════════════
+// Cantidad que realmente ingresó a bodega según el estado del ítem:
+//   completo            → lo despachado
+//   parcial             → lo recibido (si no se indicó, se asume lo despachado)
+//   pendiente_entrega   → 0 (aún no llega)
+//   pendiente / sin estado → lo despachado (compatibilidad con pedidos antiguos)
+function cantidadRecibida(it){
+  const desp = parseFloat(it.delivered)||0;
+  if(it.status==='pendiente_entrega') return 0;
+  if(it.status==='parcial'){
+    const rec = parseFloat(it.received);
+    return isNaN(rec) ? desp : rec;
+  }
+  return desp;
+}
+
+function itemsRecibidos(order){
+  return (order.items||[])
+    .map(it=>({it, cant:cantidadRecibida(it)}))
+    .filter(x=>x.cant>0)
+    .map(({it,cant})=>({
+      name: it.name, unit: it.unit, cantidad: cant,
+      obs: 'Pedido '+order.folio + (it.status==='parcial' ? ' (parcial de '+(parseFloat(it.delivered)||0)+')' : ''),
+    }));
+}
+
+// Registra o actualiza el movimiento de entrada del pedido.
+// Se ejecuta en cada guardado: si el pedido se recibe por partes, el movimiento
+// se va actualizando. Si alguien editó el movimiento a mano, no se sobrescribe.
 async function registrarEntregaInventario(order){
-  const items = (order.items||[])
-    .filter(it=>(parseFloat(it.delivered)||0)>0)
-    .map(it=>({name:it.name, unit:it.unit, cantidad:parseFloat(it.delivered)||0, obs:'Pedido '+order.folio}));
-  if(!items.length) return;
+  const items = itemsRecibidos(order);
 
   // Asegurar caché cargada aunque nunca se haya abierto la pestaña
   if(!invLoaded && !invMovs.length) invMovs = invCacheLoad();
 
-  // Evitar duplicado (local)
-  if(invMovs.some(m=>m.tipo==='entrega' && m.origen===order.folio)) return;
+  const existente = invMovs.find(m=>m.tipo==='entrega' && m.origen===order.folio);
 
+  if(!items.length){
+    if(!existente) return;
+    // Ya no hay nada recibido (se revirtieron los estados): eliminar el movimiento automático
+    if(existente.editado) return;
+    invMovs = invMovs.filter(m=>m.id!==existente.id);
+    invCacheSave();
+    if(!OFFLINE && sbClient){
+      try{ await sbClient.from('inventario_movimientos').delete().eq('id',existente.id); }
+      catch(e){ invPendAdd({op:'delete', id:existente.id}); }
+    } else invPendAdd({op:'delete', id:existente.id});
+    return;
+  }
+
+  // ── Actualizar el movimiento existente ──
+  if(existente){
+    if(existente.editado) return; // respeta la edición manual
+    const mismo = JSON.stringify(existente.items||[]) === JSON.stringify(items);
+    if(mismo) return;
+    const actualizado = {...existente, items, updated_at:new Date().toISOString()};
+    const idx = invMovs.findIndex(m=>m.id===existente.id);
+    invMovs[idx] = actualizado; invCacheSave();
+    if(!OFFLINE && sbClient){
+      try{
+        const { error } = await sbClient.from('inventario_movimientos')
+          .update({items, updated_at:actualizado.updated_at}).eq('id',existente.id);
+        if(error) throw error;
+        toast('📦 Inventario actualizado con lo recibido de '+order.folio);
+      }catch(e){
+        invPendAdd({op:'update', id:existente.id, row:{items, updated_at:actualizado.updated_at}});
+        toast('📦 Recepción actualizada localmente');
+      }
+    } else {
+      invPendAdd({op:'update', id:existente.id, row:{items, updated_at:actualizado.updated_at}});
+      toast('📦 Recepción actualizada (local)');
+    }
+    return;
+  }
+
+  // ── Crear el movimiento ──
   const mov = {
     id: invUUID(), sistema, fecha: hoyISO(), tipo:'entrega', origen:order.folio,
-    usuario: session?.name||'', items,
+    usuario: session?.name||'', items, editado:false,
     created_at:new Date().toISOString(), updated_at:new Date().toISOString(),
   };
 
@@ -2408,16 +2782,16 @@ async function registrarEntregaInventario(order){
       const { error } = await sbClient.from('inventario_movimientos').insert(mov);
       if(error) throw error;
       invMovs.unshift(mov); invCacheSave();
-      toast('📦 Inventario actualizado con la entrega '+order.folio);
+      toast('📦 Inventario actualizado con la recepción '+order.folio);
     }catch(e){
       invPendAdd({op:'insert', row:mov});
       invMovs.unshift(mov); invCacheSave();
-      toast('📦 Entrega registrada localmente — se sincronizará al reconectar');
+      toast('📦 Recepción registrada localmente — se sincronizará al reconectar');
     }
   } else {
     invPendAdd({op:'insert', row:mov});
     invMovs.unshift(mov); invCacheSave();
-    toast('📦 Entrega registrada en inventario (local)');
+    toast('📦 Recepción registrada en inventario (local)');
   }
 }
 
@@ -2609,12 +2983,62 @@ function movsEnRango(ini, fin){
   return invMovs.filter(m=>m.fecha>=ini && m.fecha<=fin);
 }
 
+// Mapa producto → categoría según el catálogo vigente
+function mapaProductoCategoria(){
+  const map = {};
+  CATS.forEach(cat=>cat.items.forEach(it=>{ map[it.n] = cat.label; }));
+  return map;
+}
+
+function poblarFiltrosReporte(){
+  const selCat = document.getElementById('rep-categoria');
+  const catActual = selCat.value || 'todas';
+  selCat.innerHTML = '<option value="todas">Todas las categorías</option>' +
+    CATS.map(c=>`<option value="${c.label.replace(/"/g,'&quot;')}">${c.icon} ${c.label}</option>`).join('');
+  if([...selCat.options].some(o=>o.value===catActual)) selCat.value = catActual;
+  poblarProductosReporte();
+}
+
+function poblarProductosReporte(){
+  const cat = document.getElementById('rep-categoria').value;
+  const selProd = document.getElementById('rep-producto');
+  const prodActual = selProd.value || 'todos';
+  // Productos del catálogo (según categoría) + productos históricos en movimientos que ya no estén en el catálogo
+  const nombres = new Set();
+  CATS.forEach(c=>{ if(cat==='todas' || c.label===cat) c.items.forEach(it=>nombres.add(it.n)); });
+  if(cat==='todas') invMovs.forEach(m=>(m.items||[]).forEach(i=>nombres.add(i.name)));
+  const lista = [...nombres].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
+  selProd.innerHTML = '<option value="todos">Todos los productos</option>' +
+    lista.map(n=>`<option value="${n.replace(/"/g,'&quot;')}">${n}</option>`).join('');
+  if([...selProd.options].some(o=>o.value===prodActual)) selProd.value = prodActual;
+}
+
+function cambioCategoriaReporte(){
+  poblarProductosReporte();
+  renderReporte();
+}
+
+function filtroItemReporte(){
+  const cat = document.getElementById('rep-categoria')?.value || 'todas';
+  const prod = document.getElementById('rep-producto')?.value || 'todos';
+  const mapa = mapaProductoCategoria();
+  return (name)=>{
+    if(prod!=='todos') return name===prod;
+    if(cat!=='todas') return (mapa[name]||null)===cat;
+    return true;
+  };
+}
+
 function datosReporte(){
   const tipo = document.getElementById('rep-periodo').value;
   const fecha = document.getElementById('rep-fecha').value || hoyISO();
   const [ini, fin] = rangoPeriodo(tipo, fecha);
-  const movs = movsEnRango(ini, fin);
-  const prods = {}; // name -> {unit, entregas, conteos, ultConteo, ultFecha}
+  const match = filtroItemReporte();
+  // Movimientos del rango, con ítems filtrados por producto/categoría (se descartan los que quedan vacíos)
+  const movs = movsEnRango(ini, fin)
+    .map(m=>({ ...m, items:(m.items||[]).filter(i=>match(i.name)) }))
+    .filter(m=>m.items.length>0);
+  const prods = {}; // name -> {unit, entregas, salidas, mermas, transf, conteos, ultConteo, ultFecha}
   const orden = [...movs].sort((a,b)=> (a.fecha||'').localeCompare(b.fecha||'') || (a.created_at||'').localeCompare(b.created_at||''));
   orden.forEach(m=>{
     (m.items||[]).forEach(i=>{
@@ -2668,13 +3092,15 @@ function renderReporte(){
   const body = document.getElementById('rep-body');
   const names = Object.keys(prods).sort();
   if(!names.length){
-    body.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--g4)">Sin movimientos en este periodo</td></tr>`;
+    body.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--g4)">Sin movimientos con estos filtros en el periodo</td></tr>`;
     return;
   }
+  const mapaCat = mapaProductoCategoria();
   body.innerHTML = names.map(n=>{
     const p = prods[n];
     return `<tr>
       <td style="font-size:12px;font-weight:600">${n}</td>
+      <td style="font-size:11px;color:var(--g4)">${mapaCat[n]||'—'}</td>
       <td style="font-size:11px;color:var(--g4);text-align:center">${p.unit}</td>
       <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:var(--rec)">${p.entregas?+p.entregas.toFixed(2):'—'}</td>
       <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:var(--er)">${p.salidas?'-'+ +p.salidas.toFixed(2):'—'}</td>
@@ -2691,10 +3117,11 @@ function exportarReporteCSV(){
   const {tipo, ini, fin, prods} = datosReporte();
   const names = Object.keys(prods).sort();
   if(!names.length){ toast('Sin datos para exportar en este periodo'); return; }
-  const rows = [['Local','Periodo','Desde','Hasta','Producto','Unidad','Total Entregas','Total Salidas','Total Mermas','Total Transferencias','N° Conteos','Último Conteo','Fecha Último Conteo']];
+  const mapaCat = mapaProductoCategoria();
+  const rows = [['Local','Periodo','Desde','Hasta','Categoría','Producto','Unidad','Total Entregas','Total Salidas','Total Mermas','Total Transferencias','N° Conteos','Último Conteo','Fecha Último Conteo']];
   names.forEach(n=>{
     const p = prods[n];
-    rows.push([SISTEMAS[sistema]?.nombre||sistema, tipo, ini, fin, n, p.unit, p.entregas, p.salidas, p.mermas, p.transf, p.conteos, p.ultConteo===null?'':p.ultConteo, p.ultFecha||'']);
+    rows.push([SISTEMAS[sistema]?.nombre||sistema, tipo, ini, fin, mapaCat[n]||'', n, p.unit, p.entregas, p.salidas, p.mermas, p.transf, p.conteos, p.ultConteo===null?'':p.ultConteo, p.ultFecha||'']);
   });
   const csv = rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\n');
   const b = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});

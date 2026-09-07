@@ -580,33 +580,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
         </div>
       </div>
 
-      <!-- ── SUB: CATÁLOGO ── -->
-      <div id="inv-sub-catalogo" style="display:none">
-        <div class="card" style="margin-bottom:14px">
-          <div class="card-body" style="padding:14px 18px">
-            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-              <span id="cat-info" style="font-size:12px;font-weight:700;color:var(--navy);background:var(--solb);border:1px solid var(--solbr);padding:4px 12px;border-radius:20px"></span>
-              <div class="btn-row" style="margin-left:auto">
-                <button class="btn btn-navy btn-sm" onclick="descargarCatalogoExcel()">📥 Descargar Excel</button>
-                <button class="btn btn-ghost btn-sm" onclick="imprimirCatalogo()">🖨️ Imprimir</button>
-              </div>
-            </div>
-            <div style="margin-top:8px;font-size:11px;color:var(--g4)">
-              Catálogo vigente de este local, incluidos los productos agregados o editados desde Admin.
-            </div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-body" style="padding:0;overflow-x:auto">
-            <table class="dash-table">
-              <thead><tr>
-                <th style="width:50px">N°</th><th>Categoría</th><th>Producto</th><th>Unidad</th>
-              </tr></thead>
-              <tbody id="cat-body"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- ══ DASHBOARD ══ -->
@@ -828,6 +801,34 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
                 <th>Fecha último conteo</th>
               </tr></thead>
               <tbody id="rep-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SUB: CATÁLOGO ── -->
+      <div id="inv-sub-catalogo" style="display:none">
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-body" style="padding:14px 18px">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <span id="cat-info" style="font-size:12px;font-weight:700;color:var(--navy);background:var(--solb);border:1px solid var(--solbr);padding:4px 12px;border-radius:20px"></span>
+              <div class="btn-row" style="margin-left:auto">
+                <button class="btn btn-navy btn-sm" onclick="descargarCatalogoExcel()">📥 Descargar Excel</button>
+                <button class="btn btn-ghost btn-sm" onclick="imprimirCatalogo()">🖨️ Imprimir</button>
+              </div>
+            </div>
+            <div style="margin-top:8px;font-size:11px;color:var(--g4)">
+              Catálogo vigente de este local, incluidos los productos agregados o editados desde Admin.
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-body" style="padding:0;overflow-x:auto">
+            <table class="dash-table">
+              <thead><tr>
+                <th style="width:50px">N°</th><th>Categoría</th><th>Producto</th><th>Unidad</th>
+              </tr></thead>
+              <tbody id="cat-body"></tbody>
             </table>
           </div>
         </div>
@@ -2247,7 +2248,7 @@ function switchInvTab(n){
     if(el) el.style.display = t===n ? '' : 'none';
   });
   if(n==='stock') renderStockActual();
-  if(n==='conteo'){ if(!invEditId) cargarConteoFecha(); }
+  if(n==='conteo'){ poblarCategoriasConteo(); if(!invEditId) cargarConteoFecha(); }
   if(n==='movs') renderMovimientos();
   if(n==='reporte'){ poblarFiltrosReporte(); renderReporte(); }
   if(n==='catalogo') renderCatalogo();

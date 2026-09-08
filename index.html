@@ -465,7 +465,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
     <div class="nav-tab" onclick="switchTab('historial')">📂 Historial</div>
     <div class="nav-tab inv-visible" style="display:none" onclick="switchTab('inventario')">📦 Inventario</div>
     <div class="nav-tab sup-only" style="display:none" onclick="switchTab('dashboard')">📊 Dashboard</div>
-    <div class="nav-tab sup-only" style="display:none" onclick="switchTab('transferencias')">🔄 Transferencias</div>
+    <div class="nav-tab tr-visible" style="display:none" onclick="switchTab('transferencias')">🔄 Transferencias</div>
     <div class="nav-tab sup-only" style="display:none" onclick="switchTab('admin')">⚙️ Admin</div>
   </div>
 
@@ -847,8 +847,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
     <div class="panel" id="panel-transferencias">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
         <div>
-          <div class="pt">🔄 Transferencias entre Locales</div>
-          <div class="ps">Solo Supervisor — registra el movimiento de productos entre sistemas</div>
+          <div class="pt">🔄 Transferencias entre Bodegas</div>
+          <div class="ps" id="tr-subtitle">Registra el movimiento de productos entre locales y Bodega Central</div>
         </div>
         <button class="btn btn-navy btn-sm" onclick="mostrarFormTransferencia()">+ Nueva transferencia</button>
       </div>
@@ -1453,6 +1453,10 @@ function doLogin() {
   if(['solicitante','despachador','supervisor'].includes(role)){
     document.querySelectorAll('.inv-visible').forEach(e=>e.style.display='');
   }
+  // Transferencias: Solicitante (su local ↔ otras bodegas) y Supervisor
+  if(['solicitante','supervisor'].includes(role)){
+    document.querySelectorAll('.tr-visible').forEach(e=>e.style.display='');
+  }
 
   // Pre-llenar conformidad
   confValues[{solicitante:'sol',despachador:'des',receptor:'rec',supervisor:'sup'}[role]].n = session.name;
@@ -1485,6 +1489,7 @@ function doLogout() {
   document.getElementById('l-pin').value='';
   document.querySelectorAll('.sup-only').forEach(e=>e.style.display='none');
   document.querySelectorAll('.inv-visible').forEach(e=>e.style.display='none');
+  document.querySelectorAll('.tr-visible').forEach(e=>e.style.display='none');
   document.getElementById('btn-new').style.display='none';
   document.getElementById('login-screen').style.display='flex';
   switchTab('formulario');
@@ -3330,6 +3335,10 @@ function getNombreSistema(id){
 }
 
 async function initTransferencias(){
+  const sub = document.getElementById('tr-subtitle');
+  if(sub) sub.textContent = trLocalPropioRequerido()
+    ? 'Registra movimientos de productos donde participe '+getNombreSistema(sistema)
+    : 'Registra el movimiento de productos entre locales y Bodega Central';
   renderLocalesGrid();
   await cargarTransferencias();
 }
@@ -3348,13 +3357,28 @@ function renderLocalesGrid(){
   destinoGrid.innerHTML = SISTEMAS_LIST.map(s=>makeBtn(s,'destino')).join('');
 }
 
+// El Solicitante solo puede mover stock donde participe su propio local;
+// el Supervisor no tiene esa restricción.
+function trLocalPropioRequerido(){ return session?.role === 'solicitante'; }
+function trRutaValida(o, d){
+  if(!trLocalPropioRequerido()) return true;
+  if(!o || !d) return true;                 // aún incompleta
+  return o === sistema || d === sistema;
+}
+
 function selLocal(id, tipo){
+  const prevO = trOrigen, prevD = trDestino;
   if(tipo==='origen'){
     if(trOrigen===id){trOrigen=null;}else{trOrigen=id;}
     if(trOrigen===trDestino) trDestino=null;
   } else {
     if(trDestino===id){trDestino=null;}else{trDestino=id;}
     if(trDestino===trOrigen) trOrigen=null;
+  }
+  if(!trRutaValida(trOrigen, trDestino)){
+    trOrigen = prevO; trDestino = prevD;
+    toast('Como Solicitante solo puedes registrar transferencias donde participe '+getNombreSistema(sistema));
+    return;
   }
   trSeleccionados={};
   renderLocalesGrid();
@@ -3432,6 +3456,10 @@ function updSelResumen(){
 
 async function guardarTransferencia(){
   if(!trOrigen||!trDestino){toast('Selecciona origen y destino');return;}
+  if(!trRutaValida(trOrigen, trDestino)){
+    toast('Como Solicitante solo puedes registrar transferencias donde participe '+getNombreSistema(sistema));
+    return;
+  }
   const items = Object.values(trSeleccionados);
   if(!items.length){toast('Agrega al menos un producto con cantidad');return;}
 

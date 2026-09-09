@@ -742,6 +742,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
             <span class="card-head-icon">📜</span>
             <span class="card-head-title">Historial de movimientos</span>
             <span id="invmov-count" style="font-size:11px;color:var(--g4)"></span>
+            <button class="btn btn-ghost btn-sm" id="btn-reprocesar" style="margin-left:auto" onclick="reprocesarRecepciones()">🔄 Reprocesar recepciones</button>
           </div>
           <div class="card-body" style="padding:0;overflow-x:auto">
             <table class="dash-table">
@@ -1661,7 +1662,10 @@ async function saveForm() {
   // Registro automático en inventario: incluye recepciones parciales.
   // Se ejecuta en cada guardado desde que el pedido está despachado en adelante.
   if(['despachado','entregado','cerrado'].includes(data.estado)){
-    registrarEntregaInventario(data);
+    registrarEntregaInventario(data).catch(e=>{
+      console.error('registrarEntregaInventario:', e);
+      toast('⚠️ No se pudo registrar la recepción en inventario — revisa la consola');
+    });
   }
 
   // 2. Intentar guardar en la nube
@@ -2372,7 +2376,7 @@ async function syncPendingInvMovs(){
   const rest = [];
   for(const op of q){
     try{
-      if(op.op==='insert'){ const {error}=await sbClient.from('inventario_movimientos').insert(op.row); if(error&&!/duplicate|unique/i.test(error.message)) throw error; }
+      if(op.op==='insert'){ const {error}=await insertMovimiento(op.row); if(error&&!/duplicate|unique/i.test(error.message)) throw error; }
       if(op.op==='update'){ const {error}=await sbClient.from('inventario_movimientos').update(op.row).eq('id',op.id); if(error) throw error; }
       if(op.op==='delete'){ const {error}=await sbClient.from('inventario_movimientos').delete().eq('id',op.id); if(error) throw error; }
     }catch(e){ rest.push(op); }
@@ -2801,7 +2805,7 @@ async function persistirMovimiento(mov, op){
     showLoading('Guardando movimiento…');
     try{
       let error;
-      if(op==='insert') ({error} = await sbClient.from('inventario_movimientos').insert(mov));
+      if(op==='insert') ({error} = await insertMovimiento(mov));
       else ({error} = await sbClient.from('inventario_movimientos')
         .update({fecha:mov.fecha, items:mov.items, usuario:mov.usuario, editado:mov.editado===true, updated_at:mov.updated_at}).eq('id',mov.id));
       hideLoading();
@@ -2828,12 +2832,17 @@ async function persistirMovimiento(mov, op){
 //   pendiente_entrega   → 0 (aún no llega)
 //   pendiente / sin estado → lo despachado (compatibilidad con pedidos antiguos)
 function cantidadRecibida(it){
-  const desp = parseFloat(it.delivered)||0;
+  const desp  = parseFloat(it.delivered)||0;
+  const pedido = parseFloat(it.asked)||0;
   if(it.status==='pendiente_entrega') return 0;
   if(it.status==='parcial'){
     const rec = parseFloat(it.received);
-    return isNaN(rec) ? desp : rec;
+    if(!isNaN(rec)) return rec;          // cantidad recibida declarada
+    return desp || pedido;               // si no, lo despachado (o lo pedido)
   }
+  // "Completo" = llegó todo. Si bodega no anotó la cantidad despachada,
+  // se asume lo solicitado; si no, quedaría en 0 y no sumaría nada al stock.
+  if(it.status==='completo') return desp || pedido;
   return desp;
 }
 
@@ -2845,6 +2854,62 @@ function itemsRecibidos(order){
       name: it.name, unit: it.unit, cantidad: cant,
       obs: 'Pedido '+order.folio + (it.status==='parcial' ? ' (parcial de '+(parseFloat(it.delivered)||0)+')' : ''),
     }));
+}
+
+// ── Helpers sobre la caché/cola de CUALQUIER bodega, esté o no en pantalla ──
+function invPendAddFor(sistemaId, op){
+  const k = 'invmov_pend_'+sistemaId;
+  let q = []; try{ q = JSON.parse(localStorage.getItem(k)||'[]'); }catch(e){}
+  q.push(op);
+  try{ localStorage.setItem(k, JSON.stringify(q)); }catch(e){}
+}
+function invCacheUpsertFor(sistemaId, mov){
+  const k = 'invmov_'+sistemaId;
+  let c = []; try{ c = JSON.parse(localStorage.getItem(k)||'[]'); }catch(e){}
+  const i = c.findIndex(m=>m.id===mov.id);
+  if(i>=0) c[i]=mov; else c.unshift(mov);
+  try{ localStorage.setItem(k, JSON.stringify(c)); }catch(e){}
+  if(invSistema===sistemaId){
+    const j = invMovs.findIndex(m=>m.id===mov.id);
+    if(j>=0) invMovs[j]=mov; else invMovs.unshift(mov);
+  }
+}
+function invCacheRemoveFor(sistemaId, id){
+  const k = 'invmov_'+sistemaId;
+  let c = []; try{ c = JSON.parse(localStorage.getItem(k)||'[]'); }catch(e){}
+  try{ localStorage.setItem(k, JSON.stringify(c.filter(m=>m.id!==id))); }catch(e){}
+  if(invSistema===sistemaId) invMovs = invMovs.filter(m=>m.id!==id);
+}
+
+// Inserta un movimiento. Si la base aún no tiene la columna `editado`,
+// reintenta sin ese campo en vez de perder el registro.
+async function insertMovimiento(mov){
+  let res = await sbClient.from('inventario_movimientos').insert(mov);
+  if(res.error && /editado/i.test(res.error.message||'')){
+    const {editado, ...sinEditado} = mov;
+    console.warn('inventario_movimientos: falta la columna `editado`, se inserta sin ella');
+    res = await sbClient.from('inventario_movimientos').insert(sinEditado);
+  }
+  return res;
+}
+
+// Busca el movimiento de un pedido (entrega o despacho) en cualquier bodega
+async function buscarMovPedido(sistemaId, tipo, folioPedido){
+  if(invSistema===sistemaId){
+    const enMemoria = invMovs.find(m=>m.tipo===tipo && m.origen===folioPedido);
+    if(enMemoria) return enMemoria;
+  }
+  try{
+    const cache = JSON.parse(localStorage.getItem('invmov_'+sistemaId)||'[]');
+    const local = cache.find(m=>m.tipo===tipo && m.origen===folioPedido);
+    if(local) return local;
+  }catch(e){}
+  if(OFFLINE || !sbClient) return null;
+  try{
+    const { data } = await sbClient.from('inventario_movimientos')
+      .select('*').eq('sistema',sistemaId).eq('tipo',tipo).eq('origen',folioPedido).limit(1);
+    return (data && data[0]) || null;
+  }catch(e){ return null; }
 }
 
 // Registra, actualiza o retira el movimiento de inventario asociado a un pedido.
@@ -2898,7 +2963,7 @@ async function registrarMovPedido(sistemaId, tipo, order, items, etiqueta){
   };
   if(!OFFLINE && sbClient){
     try{
-      const { error } = await sbClient.from('inventario_movimientos').insert(mov);
+      const { error } = await insertMovimiento(mov);
       if(error) throw error;
       invCacheUpsertFor(sistemaId, mov);
       toast(etiqueta+' registrado en '+nombreBodega(sistemaId)+' — '+order.folio);
@@ -2915,10 +2980,20 @@ async function registrarMovPedido(sistemaId, tipo, order, items, etiqueta){
 }
 
 // Lo que sale físicamente de Bodega Central: lo despachado por bodega.
+function cantidadDespachada(it){
+  const desp = parseFloat(it.delivered)||0;
+  if(desp>0) return desp;
+  // Si no se anotó la cantidad despachada pero el ítem se marcó Completo,
+  // se asume que salió lo solicitado.
+  if(it.status==='completo') return parseFloat(it.asked)||0;
+  return 0;
+}
+
 function itemsDespachados(order){
   return (order.items||[])
-    .filter(it=>(parseFloat(it.delivered)||0)>0)
-    .map(it=>({name:it.name, unit:it.unit, cantidad:parseFloat(it.delivered)||0, obs:'Pedido '+order.folio+' → '+nombreBodega(sistema)}));
+    .map(it=>({it, cant:cantidadDespachada(it)}))
+    .filter(x=>x.cant>0)
+    .map(({it,cant})=>({name:it.name, unit:it.unit, cantidad:cant, obs:'Pedido '+order.folio+' → '+nombreBodega(sistema)}));
 }
 
 // Ciclo completo del pedido sobre el inventario:
@@ -2973,6 +3048,34 @@ function renderMovimientos(){
       </td>
     </tr>`;
   }).join('');
+}
+
+// Recorre los pedidos ya despachados/entregados y registra las recepciones
+// que falten en el inventario (por ejemplo, las de días en que el registro
+// automático no llegó a ejecutarse). No duplica lo ya registrado ni pisa
+// los movimientos corregidos a mano.
+async function reprocesarRecepciones(){
+  if(!puedeRegistrarConteo()){ toast('Solo Solicitante o Supervisor pueden reprocesar'); return; }
+  const pedidos = (orders||[]).filter(o=>['despachado','entregado','cerrado'].includes(o.estado));
+  if(!pedidos.length){ toast('No hay pedidos despachados para reprocesar'); return; }
+  if(!confirm('Se revisarán '+pedidos.length+' pedidos y se registrarán las recepciones que falten en el inventario.\n\n¿Continuar?')) return;
+
+  const antes = invMovs.filter(m=>m.tipo==='entrega').length;
+  let errores = 0;
+  showLoading('Reprocesando 0 de '+pedidos.length+'…');
+  for(let i=0;i<pedidos.length;i++){
+    showLoading('Reprocesando '+(i+1)+' de '+pedidos.length+'…');
+    try{ await registrarEntregaInventario(pedidos[i]); }
+    catch(e){ errores++; console.error('reproceso '+pedidos[i].folio+':', e); }
+  }
+  hideLoading();
+
+  await cargarMovimientos();
+  const nuevos = invMovs.filter(m=>m.tipo==='entrega').length - antes;
+  renderMovimientos();
+  toast(nuevos>0
+    ? '✅ '+nuevos+' recepción'+(nuevos===1?'':'es')+' agregada'+(nuevos===1?'':'s')+' al inventario'
+    : (errores ? '⚠️ No se pudo registrar ninguna — revisa la consola' : '✅ Todo estaba al día, no faltaba ninguna recepción'));
 }
 
 function toggleMovDetalle(id){

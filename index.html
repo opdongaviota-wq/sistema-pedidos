@@ -2852,7 +2852,9 @@ function itemsRecibidos(order){
     .filter(x=>x.cant>0)
     .map(({it,cant})=>({
       name: it.name, unit: it.unit, cantidad: cant,
-      obs: 'Pedido '+order.folio + (it.status==='parcial' ? ' (parcial de '+(parseFloat(it.delivered)||0)+')' : ''),
+      obs: 'Pedido '+order.folio
+        + (it.status==='parcial' ? ' (parcial de '+(parseFloat(it.delivered)||0)+')' : '')
+        + ((it.status==='completo' && !(parseFloat(it.delivered)>0)) ? ' (completo — cantidad asumida del solicitado)' : ''),
     }));
 }
 
@@ -2917,6 +2919,12 @@ async function buscarMovPedido(sistemaId, tipo, folioPedido){
 // de Bodega Central (tipo 'despacho'). Se ejecuta en cada guardado, así que
 // una recepción por partes va actualizando el movimiento. Si alguien lo corrigió
 // a mano (editado = true), no se sobrescribe.
+// Fecha real en que el pedido movió stock: la de entrega; si no hay, la del pedido.
+// Es clave para el cálculo del stock, que suma solo lo posterior al último conteo.
+function fechaMovPedido(order){
+  return order.fechaEntrega || order.fecha || hoyISO();
+}
+
 async function registrarMovPedido(sistemaId, tipo, order, items, etiqueta){
   if(!invLoaded && invSistema===sistemaId && !invMovs.length) invMovs = invCacheLoad();
   const existente = await buscarMovPedido(sistemaId, tipo, order.folio);
@@ -2932,24 +2940,27 @@ async function registrarMovPedido(sistemaId, tipo, order, items, etiqueta){
     return;
   }
 
-  // ── Actualizar el existente ──
+  // ── Actualizar el existente (cantidades y/o fecha) ──
+  const fechaMov = fechaMovPedido(order);
   if(existente){
     if(existente.editado) return;
-    if(JSON.stringify(existente.items||[]) === JSON.stringify(items)) return;
-    const actualizado = {...existente, items, updated_at:new Date().toISOString()};
+    const mismosItems = JSON.stringify(existente.items||[]) === JSON.stringify(items);
+    const mismaFecha  = existente.fecha === fechaMov;
+    if(mismosItems && mismaFecha) return;
+    const actualizado = {...existente, items, fecha:fechaMov, updated_at:new Date().toISOString()};
     invCacheUpsertFor(sistemaId, actualizado);
+    const row = {items, fecha:fechaMov, updated_at:actualizado.updated_at};
     if(!OFFLINE && sbClient){
       try{
-        const { error } = await sbClient.from('inventario_movimientos')
-          .update({items, updated_at:actualizado.updated_at}).eq('id',existente.id);
+        const { error } = await sbClient.from('inventario_movimientos').update(row).eq('id',existente.id);
         if(error) throw error;
         toast(etiqueta+' actualizado en '+nombreBodega(sistemaId)+' — '+order.folio);
       }catch(e){
-        invPendAddFor(sistemaId, {op:'update', id:existente.id, row:{items, updated_at:actualizado.updated_at}});
+        invPendAddFor(sistemaId, {op:'update', id:existente.id, row});
         toast(etiqueta+' actualizado localmente');
       }
     } else {
-      invPendAddFor(sistemaId, {op:'update', id:existente.id, row:{items, updated_at:actualizado.updated_at}});
+      invPendAddFor(sistemaId, {op:'update', id:existente.id, row});
       toast(etiqueta+' actualizado (local)');
     }
     return;
@@ -2957,7 +2968,7 @@ async function registrarMovPedido(sistemaId, tipo, order, items, etiqueta){
 
   // ── Crear ──
   const mov = {
-    id: invUUID(), sistema: sistemaId, fecha: hoyISO(), tipo, origen:order.folio,
+    id: invUUID(), sistema: sistemaId, fecha: fechaMovPedido(order), tipo, origen:order.folio,
     usuario: session?.name||'', items, editado:false,
     created_at:new Date().toISOString(), updated_at:new Date().toISOString(),
   };
@@ -3050,19 +3061,20 @@ function renderMovimientos(){
   }).join('');
 }
 
-// Recorre los pedidos ya despachados/entregados y registra las recepciones
-// que falten en el inventario (por ejemplo, las de días en que el registro
-// automático no llegó a ejecutarse). No duplica lo ya registrado ni pisa
-// los movimientos corregidos a mano.
+// Recorre los pedidos ya despachados/entregados y deja el inventario al día:
+// crea las recepciones que falten y corrige la fecha de las que se hayan
+// registrado con una fecha equivocada. No toca los movimientos editados a mano.
 async function reprocesarRecepciones(){
   if(!puedeRegistrarConteo()){ toast('Solo Solicitante o Supervisor pueden reprocesar'); return; }
   const pedidos = (orders||[]).filter(o=>['despachado','entregado','cerrado'].includes(o.estado));
   if(!pedidos.length){ toast('No hay pedidos despachados para reprocesar'); return; }
-  if(!confirm('Se revisarán '+pedidos.length+' pedidos y se registrarán las recepciones que falten en el inventario.\n\n¿Continuar?')) return;
+  if(!confirm('Se revisarán '+pedidos.length+' pedidos.\n\nSe crearán las recepciones que falten y se corregirá la fecha de las que estén mal, usando la fecha de entrega de cada pedido.\n\n¿Continuar?')) return;
 
-  const antes = invMovs.filter(m=>m.tipo==='entrega').length;
+  // Foto previa por folio para poder informar qué cambió
+  const antes = {};
+  invMovs.filter(m=>m.tipo==='entrega').forEach(m=>{ antes[m.origen] = m.fecha; });
+
   let errores = 0;
-  showLoading('Reprocesando 0 de '+pedidos.length+'…');
   for(let i=0;i<pedidos.length;i++){
     showLoading('Reprocesando '+(i+1)+' de '+pedidos.length+'…');
     try{ await registrarEntregaInventario(pedidos[i]); }
@@ -3071,11 +3083,18 @@ async function reprocesarRecepciones(){
   hideLoading();
 
   await cargarMovimientos();
-  const nuevos = invMovs.filter(m=>m.tipo==='entrega').length - antes;
+  let creadas = 0, corregidas = 0;
+  invMovs.filter(m=>m.tipo==='entrega').forEach(m=>{
+    if(antes[m.origen] === undefined) creadas++;
+    else if(antes[m.origen] !== m.fecha) corregidas++;
+  });
+
   renderMovimientos();
-  toast(nuevos>0
-    ? '✅ '+nuevos+' recepción'+(nuevos===1?'':'es')+' agregada'+(nuevos===1?'':'s')+' al inventario'
-    : (errores ? '⚠️ No se pudo registrar ninguna — revisa la consola' : '✅ Todo estaba al día, no faltaba ninguna recepción'));
+  const partes = [];
+  if(creadas)    partes.push(creadas+' recepción'+(creadas===1?'':'es')+' creada'+(creadas===1?'':'s'));
+  if(corregidas) partes.push(corregidas+' fecha'+(corregidas===1?'':'s')+' corregida'+(corregidas===1?'':'s'));
+  if(errores)    partes.push(errores+' con error');
+  toast(partes.length ? '✅ '+partes.join(' · ') : '✅ Inventario ya estaba al día');
 }
 
 function toggleMovDetalle(id){

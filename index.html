@@ -651,6 +651,26 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
 
       <!-- ── SUB: STOCK ACTUAL ── -->
       <div id="inv-sub-stock">
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-body" style="padding:14px 18px">
+            <div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap">
+              <div class="mf" style="margin:0;min-width:200px">
+                <label>Categoría</label>
+                <select id="stock-categoria" style="width:100%;padding:8px 11px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px;font-family:inherit" onchange="renderStockActual()">
+                  <option value="todas">Todas las categorías</option>
+                </select>
+              </div>
+              <label style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--g5);cursor:pointer;padding-bottom:8px">
+                <input type="checkbox" id="stock-solo-neg" onchange="renderStockActual()" style="width:15px;height:15px;cursor:pointer">
+                Solo stock negativo
+              </label>
+              <div class="btn-row" style="margin-left:auto;padding-bottom:2px">
+                <button class="btn btn-navy btn-sm" onclick="descargarStockExcel()">📥 Excel</button>
+                <button class="btn btn-ghost btn-sm" onclick="imprimirStock()">🖨️ Imprimir</button>
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="card">
           <div class="card-head" style="cursor:default">
             <span class="card-head-icon">📦</span>
@@ -660,7 +680,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
           <div class="card-body" style="padding:0;overflow-x:auto">
             <table class="dash-table">
               <thead><tr>
-                <th>Producto</th><th>Unidad</th>
+                <th>Producto</th><th>Categoría</th><th>Unidad</th>
                 <th style="text-align:right">Último conteo</th>
                 <th>Fecha conteo</th>
                 <th style="text-align:right">± Entradas/Salidas post.</th>
@@ -3195,28 +3215,133 @@ function calcularStock(){
   return prods;
 }
 
-function renderStockActual(){
-  const body = document.getElementById('inv-stock-body');
+// Filas del stock según el filtro de categoría y el switch de negativos
+function filasStock(){
+  const cat  = document.getElementById('stock-categoria')?.value || 'todas';
+  const soloNeg = document.getElementById('stock-solo-neg')?.checked;
   const prods = calcularStock();
-  const names = Object.keys(prods).sort();
-  document.getElementById('inv-stock-info').textContent = invMovs.length ? 'Basado en '+invMovs.length+' movimientos' : '';
-  if(!names.length){
-    body.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--g4)">Sin datos. Registra un conteo diario para establecer la base del stock.</td></tr>`;
+  const mapa  = mapaProductoCategoria();
+  return Object.keys(prods).sort().map(n=>{
+    const p = prods[n];
+    return {
+      nombre: n,
+      categoria: mapa[n] || 'Sin categoría',
+      unidad: p.unit,
+      conteo: p.conteo,
+      fechaConteo: p.fechaConteo,
+      ajuste: p.entregas,
+      stock: +((p.conteo||0) + p.entregas).toFixed(2),
+    };
+  }).filter(f=>{
+    if(cat!=='todas' && f.categoria!==cat) return false;
+    if(soloNeg && f.stock >= 0) return false;
+    return true;
+  });
+}
+
+function poblarCategoriasStock(){
+  const sel = document.getElementById('stock-categoria');
+  if(!sel) return;
+  const actual = sel.value || 'todas';
+  sel.innerHTML = '<option value="todas">Todas las categorías</option>' +
+    catsInv().map(c=>`<option value="${c.label.replace(/"/g,'&quot;')}">${c.icon} ${c.label}</option>`).join('') +
+    '<option value="Sin categoría">Sin categoría</option>';
+  if([...sel.options].some(o=>o.value===actual)) sel.value = actual;
+}
+
+function renderStockActual(){
+  poblarCategoriasStock();
+  const body  = document.getElementById('inv-stock-body');
+  const filas = filasStock();
+  const negativos = filas.filter(f=>f.stock<0).length;
+  document.getElementById('inv-stock-info').textContent =
+    (invMovs.length ? filas.length+' producto'+(filas.length===1?'':'s')+' · '+invMovs.length+' movimientos' : '') +
+    (negativos ? ' · ⚠️ '+negativos+' en negativo' : '');
+
+  if(!filas.length){
+    const soloNeg = document.getElementById('stock-solo-neg')?.checked;
+    body.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--g4)">${
+      soloNeg ? '✅ Ningún producto en negativo con este filtro'
+              : 'Sin datos. Registra un conteo para establecer la base del stock.'}</td></tr>`;
     return;
   }
-  body.innerHTML = names.map(n=>{
-    const p = prods[n];
-    const sinBase = p.conteo===null;
-    const stock = (p.conteo||0) + p.entregas;
+  body.innerHTML = filas.map(f=>{
+    const sinBase = f.conteo===null;
     return `<tr>
-      <td style="font-size:12px;font-weight:600">${n}</td>
-      <td style="font-size:11px;color:var(--g4);text-align:center">${p.unit}</td>
-      <td style="text-align:right;font-family:'DM Mono',monospace;color:var(--sol)">${sinBase?'—':p.conteo}</td>
-      <td style="font-size:11px;color:var(--g4)">${sinBase?'⚠️ sin conteo base':fmtFecha(p.fechaConteo)}</td>
-      <td style="text-align:right;font-family:'DM Mono',monospace;color:${p.entregas<0?'var(--er)':'var(--rec)'}">${p.entregas ? (p.entregas>0?'+':'')+ +p.entregas.toFixed(2) : '—'}</td>
-      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:var(--navy)">${+stock.toFixed(2)}</td>
+      <td style="font-size:12px;font-weight:600">${f.nombre}</td>
+      <td style="font-size:11px;color:var(--g4)">${f.categoria}</td>
+      <td style="font-size:11px;color:var(--g4);text-align:center">${f.unidad}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;color:var(--sol)">${sinBase?'—':f.conteo}</td>
+      <td style="font-size:11px;color:var(--g4)">${sinBase?'⚠️ sin conteo base':fmtFecha(f.fechaConteo)}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;color:${f.ajuste<0?'var(--er)':'var(--rec)'}">${f.ajuste ? (f.ajuste>0?'+':'')+ +f.ajuste.toFixed(2) : '—'}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:${f.stock<0?'var(--er)':'var(--navy)'}">${f.stock}</td>
     </tr>`;
   }).join('');
+}
+
+function etiquetaFiltroStock(){
+  const cat = document.getElementById('stock-categoria')?.value || 'todas';
+  const soloNeg = document.getElementById('stock-solo-neg')?.checked;
+  return (cat==='todas' ? 'Todas las categorías' : cat) + (soloNeg ? ' — solo stock negativo' : '');
+}
+
+async function descargarStockExcel(){
+  const filas = filasStock();
+  if(!filas.length){ toast('No hay productos con ese filtro'); return; }
+  const rows = [
+    ['STOCK ESTIMADO DE INVENTARIO'],
+    ['Bodega:', nombreBodega(invSistema), '', 'Generado:', fmtFecha(hoyISO())],
+    ['Filtro:', etiquetaFiltroStock(), '', 'Productos:', filas.length],
+    [],
+    ['Categoría','Producto','Unidad','Último conteo','Fecha conteo','Movimientos posteriores','Stock estimado'],
+  ];
+  filas.forEach(f=>rows.push([
+    f.categoria, f.nombre, f.unidad,
+    f.conteo===null ? '' : f.conteo,
+    f.fechaConteo || 'sin conteo base',
+    f.ajuste, f.stock,
+  ]));
+  await exportarExcel(
+    [{nombre:'Stock', filas:rows, anchos:[22,44,12,14,16,22,15]}],
+    'stock_'+invSistema+'_'+hoyISO()+'.xlsx'
+  );
+}
+
+function imprimirStock(){
+  const filas = filasStock();
+  if(!filas.length){ toast('No hay productos con ese filtro'); return; }
+  let cuerpo = '', catActual = null;
+  filas.forEach(f=>{
+    if(f.categoria!==catActual){
+      catActual = f.categoria;
+      cuerpo += `<tr class="cat"><td colspan="5">${f.categoria.toUpperCase()}</td></tr>`;
+    }
+    cuerpo += `<tr>
+      <td>${f.nombre}</td>
+      <td style="text-align:center">${f.unidad}</td>
+      <td style="text-align:right;font-family:monospace">${f.conteo===null?'—':f.conteo}</td>
+      <td style="font-size:8pt">${f.fechaConteo?fmtFecha(f.fechaConteo):'sin conteo'}</td>
+      <td style="text-align:right;font-family:monospace;font-weight:700">${f.stock}</td>
+    </tr>`;
+  });
+  const negativos = filas.filter(f=>f.stock<0).length;
+  abrirVentanaImpresion('Stock estimado', `
+    <h1>📦 Stock Estimado de Inventario</h1>
+    <div class="sub">${nombreBodega(invSistema)} — ${etiquetaFiltroStock()}</div>
+    <div class="meta">
+      <span><b>GENERADO</b>${fmtFecha(hoyISO())}</span>
+      <span><b>PRODUCTOS</b>${filas.length}</span>
+      ${negativos?`<span><b>EN NEGATIVO</b>${negativos}</span>`:''}
+    </div>
+    <table>
+      <thead><tr>
+        <th>Producto</th><th style="width:18mm;text-align:center">Unidad</th>
+        <th style="width:22mm;text-align:right">Últ. conteo</th>
+        <th style="width:26mm">Fecha conteo</th>
+        <th style="width:24mm;text-align:right">Stock</th>
+      </tr></thead>
+      <tbody>${cuerpo}</tbody>
+    </table>`);
 }
 
 // ════════════════════════════════════════════════

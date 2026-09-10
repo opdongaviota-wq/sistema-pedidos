@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Pedidos">
 <meta name="theme-color" content="#0f2540">
-<title>Sistema de Pedidos v3.1</title>
+<title>Sistema de Pedidos v3.2</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -349,6 +349,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
 .mov-salida{background:var(--erb);color:var(--er)}
 .mov-merma{background:var(--goldb);color:var(--des)}
 .mov-entrada{background:var(--okb);color:var(--ok)}
+.app-ver{font-size:10px;font-weight:700;font-family:'DM Mono',monospace;color:rgba(255,255,255,.55);border:1px solid rgba(255,255,255,.2);border-radius:20px;padding:2px 8px;cursor:pointer;white-space:nowrap;transition:all .15s}
+.app-ver:hover{color:white;border-color:rgba(255,255,255,.5);background:rgba(255,255,255,.08)}
+@media(max-width:640px){.app-ver{display:none}}
 .mov-despacho{background:#e8e3f7;color:#5b3fa8}
 .mov-btn{border:1px solid var(--g2);border-radius:6px;background:white;cursor:pointer;padding:3px 7px;font-size:13px;margin:0 2px}
 .mov-btn:hover{background:var(--g1)}
@@ -439,6 +442,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
       <input type="password" id="l-pin" placeholder="••••" maxlength="8" onkeydown="if(event.key==='Enter')doLogin()">
     </div>
     <div class="l-err" id="l-err"></div>
+    <div id="login-version" style="text-align:center;font-size:11px;color:var(--g4);margin-top:10px"></div>
     <button class="btn-login" onclick="doLogin()">Ingresar →</button>
   </div>
 </div>
@@ -453,6 +457,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
     <div class="topbar-sep"></div>
     <div class="topbar-folio" id="tb-folio">---</div>
     <div class="topbar-right">
+      <span class="app-ver" id="tb-version" title="Versión cargada — tócala para recargar la app" onclick="recargarApp()"></span>
       <div class="sync-dot ok" id="sync-dot" title="Sincronización"></div>
       <span class="role-badge" id="tb-badge"></span>
       <span class="topbar-user" id="tb-user"></span>
@@ -1330,7 +1335,26 @@ function credClear() {
 }
 
 // Auto-restore saved credentials
+// Muestra la versión cargada y fuerza una recarga limpia si se toca
+function pintarVersion(){
+  const txt = 'v'+APP_VERSION;
+  const badge = document.getElementById('tb-version');
+  if(badge){ badge.textContent = txt; badge.title = 'Versión '+APP_VERSION+' · '+fmtFecha(APP_FECHA)+' — tócala para recargar la app'; }
+  const login = document.getElementById('login-version');
+  if(login) login.textContent = 'Sistema de Pedidos '+txt+' · '+fmtFecha(APP_FECHA);
+}
+
+// Recarga saltándose la caché del navegador, sin borrar los datos locales:
+// se agrega un parámetro a la URL para que el archivo se descargue de nuevo.
+function recargarApp(){
+  if(!confirm('¿Recargar la aplicación para buscar una versión nueva?\n\nTus datos guardados no se pierden.')) return;
+  const u = new URL(window.location.href);
+  u.searchParams.set('v', Date.now().toString(36));
+  window.location.replace(u.toString());
+}
+
 window.addEventListener('DOMContentLoaded', async () => {
+  pintarVersion();
   const saved = credLoad();
 
   if(saved) {
@@ -2212,6 +2236,14 @@ function imprimirPedido(o) {
 // INVENTARIO DEL LOCAL — inventario_movimientos
 // tipo: 'conteo' (registro absoluto diario) | 'entrega' (suma automática al marcar pedido Entregado)
 // ════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════
+// VERSIÓN DE LA APLICACIÓN
+// Subir estos valores en cada despliegue: permiten confirmar
+// de un vistazo si el navegador cargó la versión nueva.
+// ════════════════════════════════════════════════
+const APP_VERSION = '3.2';
+const APP_FECHA   = '2026-09-09';
 
 let invMovs = [];        // movimientos de la bodega seleccionada
 let invEditId = null;    // id del movimiento en edición (null = conteo nuevo/del día)

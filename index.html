@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Pedidos">
 <meta name="theme-color" content="#0f2540">
-<title>Sistema de Pedidos v3.2</title>
+<title>Sistema de Pedidos v3.3</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -1019,6 +1019,21 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
     <div class="mf" style="margin-bottom:18px"><label>Categoría</label><select id="modal-cat"></select></div>
     <input type="hidden" id="modal-cat-id"><input type="hidden" id="modal-prod-idx">
     <div class="btn-row"><button class="btn btn-ghost" onclick="cerrarModal()">Cancelar</button><button class="btn btn-navy" onclick="guardarProducto()">Guardar</button></div>
+  </div>
+</div>
+
+<div class="modal-ov" id="huerfano-ov" onclick="if(event.target===this)cerrarHuerfano()">
+  <div class="modal-box" style="max-width:440px">
+    <div class="modal-title">🔗 Unificar producto</div>
+    <div style="font-size:12px;color:var(--g5);margin-bottom:14px;line-height:1.5">
+      <strong id="huerfano-nombre"></strong> ya no está en el catálogo. Elige el producto actual al que corresponde:
+      todo su historial pasará a ese nombre.
+    </div>
+    <div class="mf" style="margin-bottom:10px"><label>Producto del catálogo</label>
+      <select id="huerfano-destino" onchange="previewHuerfano()"></select>
+    </div>
+    <div id="huerfano-info" style="font-size:12px;border-radius:8px;padding:9px 12px;margin-bottom:16px;display:none"></div>
+    <div class="btn-row"><button class="btn btn-ghost" onclick="cerrarHuerfano()">Cancelar</button><button class="btn btn-navy" onclick="confirmarUnificar()">Unificar</button></div>
   </div>
 </div>
 
@@ -2242,8 +2257,8 @@ function imprimirPedido(o) {
 // Subir estos valores en cada despliegue: permiten confirmar
 // de un vistazo si el navegador cargó la versión nueva.
 // ════════════════════════════════════════════════
-const APP_VERSION = '3.2';
-const APP_FECHA   = '2026-09-09';
+const APP_VERSION = '3.3';
+const APP_FECHA   = '2026-09-22';
 
 let invMovs = [];        // movimientos de la bodega seleccionada
 let invEditId = null;    // id del movimiento en edición (null = conteo nuevo/del día)
@@ -3297,11 +3312,12 @@ function renderStockActual(){
               : 'Sin datos. Registra un conteo para establecer la base del stock.'}</td></tr>`;
     return;
   }
+  huerfanosIdx = [];
   body.innerHTML = filas.map(f=>{
     const sinBase = f.conteo===null;
     return `<tr>
       <td style="font-size:12px;font-weight:600">${f.nombre}</td>
-      <td style="font-size:11px;color:var(--g4)">${f.categoria}</td>
+      <td style="font-size:11px;color:var(--g4)">${celdaCategoriaStock(f)}</td>
       <td style="font-size:11px;color:var(--g4);text-align:center">${f.unidad}</td>
       <td style="text-align:right;font-family:'DM Mono',monospace;color:var(--sol)">${sinBase?'—':f.conteo}</td>
       <td style="font-size:11px;color:var(--g4)">${sinBase?'⚠️ sin conteo base':fmtFecha(f.fechaConteo)}</td>
@@ -3374,6 +3390,147 @@ function imprimirStock(){
       </tr></thead>
       <tbody>${cuerpo}</tbody>
     </table>`);
+}
+
+// ════════════════════════════════════════════════
+// PRODUCTOS SIN CATEGORÍA (huérfanos)
+// Nombres que aparecen en movimientos pero ya no existen en el catálogo:
+// productos que se renombraron o eliminaron desde Admin después de tener
+// historial. Admin no puede mostrarlos porque solo muestra el catálogo vivo.
+// ════════════════════════════════════════════════
+let huerfanoActual = null;
+
+function puedeResolverHuerfanos(){ return session?.role === 'supervisor'; }
+
+// Los nombres se pasan por índice, no incrustados en el onclick:
+// así ningún nombre con comillas o barras puede romper el HTML.
+let huerfanosIdx = [];
+function celdaCategoriaStock(f){
+  if(f.categoria !== 'Sin categoría' || !puedeResolverHuerfanos()) return f.categoria;
+  const i = huerfanosIdx.push(f.nombre) - 1;
+  return `<span style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap">Sin categoría
+    <button class="mov-btn" title="Unificar con un producto del catálogo" onclick="abrirHuerfano(huerfanosIdx[${i}])">🔗</button>
+    <button class="mov-btn" title="Quitar del inventario" onclick="quitarHuerfano(huerfanosIdx[${i}])">🗑️</button></span>`;
+}
+
+function movsConProducto(nombre){
+  return invMovs.filter(m=>(m.items||[]).some(i=>i.name===nombre));
+}
+
+// Junta líneas repetidas del mismo producto dentro de un movimiento
+function fusionarItems(items){
+  const out = [];
+  items.forEach(i=>{
+    const prev = out.find(x=>x.name===i.name);
+    if(!prev){ out.push({...i}); return; }
+    prev.cantidad = +((parseFloat(prev.cantidad)||0) + (parseFloat(i.cantidad)||0)).toFixed(3);
+    if(i.obs && i.obs!==prev.obs) prev.obs = [prev.obs, i.obs].filter(Boolean).join(' · ');
+  });
+  return out;
+}
+
+// Guarda los ítems nuevos de un movimiento. Queda marcado como editado para
+// que el registro automático de pedidos no lo vuelva a su versión anterior.
+async function guardarItemsMov(mov, items){
+  const updated_at = new Date().toISOString();
+  if(!items.length){
+    const { error } = await sbClient.from('inventario_movimientos').delete().eq('id', mov.id);
+    if(error) throw error;
+    invCacheRemoveFor(mov.sistema, mov.id);
+    return 'eliminado';
+  }
+  let r = await sbClient.from('inventario_movimientos')
+    .update({items, editado:true, updated_at}).eq('id', mov.id);
+  if(r.error && /editado/i.test(r.error.message||'')){
+    r = await sbClient.from('inventario_movimientos').update({items, updated_at}).eq('id', mov.id);
+  }
+  if(r.error) throw r.error;
+  invCacheUpsertFor(mov.sistema, {...mov, items, editado:true, updated_at});
+  return 'actualizado';
+}
+
+// Reescribe un producto en todos los movimientos de la bodega actual.
+// destino = {n, u} para unificar; null para quitarlo.
+async function reescribirProducto(nombreViejo, destino){
+  if(OFFLINE || !sbClient){ toast('Esta acción necesita conexión'); return; }
+  const afectados = movsConProducto(nombreViejo);
+  let actualizados = 0, eliminados = 0, errores = 0;
+  for(let k=0; k<afectados.length; k++){
+    showLoading('Actualizando '+(k+1)+' de '+afectados.length+'…');
+    const mov = afectados[k];
+    let items;
+    if(destino){
+      items = fusionarItems((mov.items||[]).map(i=>
+        i.name===nombreViejo ? {...i, name:destino.n, unit:destino.u} : i));
+    } else {
+      items = (mov.items||[]).filter(i=>i.name!==nombreViejo);
+    }
+    try{
+      const res = await guardarItemsMov(mov, items);
+      if(res==='eliminado') eliminados++; else actualizados++;
+    }catch(e){ errores++; console.error('reescribirProducto '+mov.id+':', e); }
+  }
+  hideLoading();
+  await cargarMovimientos();
+  renderStockActual();
+  const partes = [];
+  if(actualizados) partes.push(actualizados+' movimiento'+(actualizados===1?'':'s')+' actualizado'+(actualizados===1?'':'s'));
+  if(eliminados)   partes.push(eliminados===1 ? '1 quedó vacío y se eliminó' : eliminados+' quedaron vacíos y se eliminaron');
+  if(errores)      partes.push('⚠️ '+errores+' con error');
+  toast((errores?'':'✅ ')+(partes.join(' · ')||'Sin cambios'));
+}
+
+function abrirHuerfano(nombre){
+  if(!puedeResolverHuerfanos()) return;
+  huerfanoActual = nombre;
+  document.getElementById('huerfano-nombre').textContent = nombre;
+  const sel = document.getElementById('huerfano-destino');
+  sel.innerHTML = '<option value="">— Elige un producto —</option>' +
+    catsInv().map(c=>`<optgroup label="${c.icon} ${c.label.replace(/"/g,'&quot;')}">${
+      c.items.map(it=>`<option value="${it.n.replace(/"/g,'&quot;')}" data-u="${(it.u||'').replace(/"/g,'&quot;')}">${it.n} (${it.u})</option>`).join('')
+    }</optgroup>`).join('');
+  document.getElementById('huerfano-info').style.display='none';
+  document.getElementById('huerfano-ov').classList.add('show');
+}
+
+function cerrarHuerfano(){
+  document.getElementById('huerfano-ov').classList.remove('show');
+  huerfanoActual = null;
+}
+
+function previewHuerfano(){
+  const sel = document.getElementById('huerfano-destino');
+  const info = document.getElementById('huerfano-info');
+  if(!sel.value || !huerfanoActual){ info.style.display='none'; return; }
+  const uNueva = sel.selectedOptions[0].dataset.u || '';
+  const movs = movsConProducto(huerfanoActual);
+  const uVieja = (movs.flatMap(m=>m.items).find(i=>i.name===huerfanoActual)||{}).unit || '';
+  const unidadDistinta = uVieja && uNueva && uVieja.toLowerCase() !== uNueva.toLowerCase();
+  info.style.display='block';
+  info.style.background = unidadDistinta ? 'var(--goldb)' : 'var(--okb)';
+  info.style.color      = unidadDistinta ? 'var(--des)'   : 'var(--ok)';
+  info.innerHTML = `Se modificarán <strong>${movs.length}</strong> movimiento${movs.length===1?'':'s'}.`
+    + (unidadDistinta
+        ? `<br>⚠️ Las unidades no coinciden: <strong>${uVieja}</strong> → <strong>${uNueva}</strong>. Las cantidades no se convierten; confirma que sean equivalentes.`
+        : '');
+}
+
+async function confirmarUnificar(){
+  const sel = document.getElementById('huerfano-destino');
+  if(!sel.value){ toast('Elige el producto del catálogo'); return; }
+  const destino = { n: sel.value, u: sel.selectedOptions[0].dataset.u || '' };
+  const viejo = huerfanoActual;
+  const n = movsConProducto(viejo).length;
+  if(!confirm(`¿Unificar "${viejo}" con "${destino.n}"?\n\nSe modificarán ${n} movimiento${n===1?'':'s'} de ${nombreBodega(invSistema)}. Esto no se puede deshacer.`)) return;
+  cerrarHuerfano();
+  await reescribirProducto(viejo, destino);
+}
+
+async function quitarHuerfano(nombre){
+  if(!puedeResolverHuerfanos()) return;
+  const n = movsConProducto(nombre).length;
+  if(!confirm(`¿Quitar "${nombre}" del inventario de ${nombreBodega(invSistema)}?\n\nSe borrará esa línea en ${n} movimiento${n===1?'':'s'}. Los demás productos de esos movimientos se mantienen.\n\nEsto no se puede deshacer.`)) return;
+  await reescribirProducto(nombre, null);
 }
 
 // ════════════════════════════════════════════════

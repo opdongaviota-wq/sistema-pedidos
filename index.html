@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Pedidos">
 <meta name="theme-color" content="#0f2540">
-<title>Sistema de Pedidos v3.3</title>
+<title>Sistema de Pedidos v3.4</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -972,6 +972,22 @@ body{font-family:'DM Sans',sans-serif;background:var(--g1);color:var(--g8);min-h
       <div class="ps">Solo Supervisor</div>
 
       <div class="card">
+        <div class="card-head" onclick="toggleCard(this)"><span class="card-head-icon">🧹</span><span class="card-head-title">Almacenamiento del dispositivo</span><span class="card-head-toggle">▶</span></div>
+        <div class="card-body" style="display:none">
+          <div style="font-size:13px;color:var(--g5);line-height:1.6;margin-bottom:12px">
+            La app guarda una copia local de pedidos, movimientos y transferencias para funcionar sin conexión.
+            Si el navegador se queda sin espacio aparece el aviso <em>"quota exceeded"</em>.
+            Liberar la caché <strong>no borra nada de Supabase</strong> ni las operaciones pendientes de sincronizar.
+          </div>
+          <div id="ls-uso" style="font-size:12px;font-weight:700;color:var(--navy);background:var(--solb);border:1px solid var(--solbr);padding:6px 12px;border-radius:20px;display:inline-block;margin-bottom:12px"></div>
+          <div class="btn-row">
+            <button class="btn btn-ghost btn-sm" onclick="mostrarUsoLocal()">🔄 Calcular uso</button>
+            <button class="btn btn-danger btn-sm" onclick="limpiarCacheLocal()">🧹 Liberar espacio</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
         <div class="card-head" onclick="toggleCard(this)"><span class="card-head-icon">📦</span><span class="card-head-title">Catálogo de productos</span><span class="card-head-toggle open">▼</span></div>
         <div class="card-body">
           <div style="background:var(--okb);border:1px solid var(--recbr);border-radius:var(--r);padding:11px 14px;margin-bottom:14px;font-size:13px;color:var(--ok)">
@@ -1312,7 +1328,7 @@ function selSistema(sys, el) {
 // ════════════════════════════════════════════════
 function credSave(url, key, sis) {
   // Capa 1: localStorage
-  try { localStorage.setItem('supa_url',url); localStorage.setItem('supa_key',key); localStorage.setItem('supa_sistema',sis); } catch(e){}
+  try { lsSet('supa_url',url); lsSet('supa_key',key); lsSet('supa_sistema',sis); } catch(e){}
   // Capa 2: cookies con 1 año de expiración (funciona en iOS PWA)
   const exp = new Date(Date.now() + 365*24*60*60*1000).toUTCString();
   document.cookie = `supa_url=${encodeURIComponent(url)};expires=${exp};path=/;SameSite=Lax`;
@@ -1605,15 +1621,72 @@ function supaRowToOrder(row) {
 // ════════════════════════════════════════════════
 // OFFLINE-FIRST — Cola de sincronización
 // ════════════════════════════════════════════════
+// ════════════════════════════════════════════════
+// ALMACENAMIENTO LOCAL SEGURO
+// El navegador limita el espacio (unos 5 MB). Las cachés de pedidos,
+// movimientos y transferencias crecen con el uso y pueden llenarlo.
+// Estas funciones evitan que un almacenamiento lleno rompa una operación
+// que ya se guardó en la nube: recortan las cachés y siguen adelante.
+// Las colas de pendientes NUNCA se recortan: contienen datos sin sincronizar.
+// ════════════════════════════════════════════════
+
+// Cachés recortables: son copias de lo que ya está en Supabase
+function esCacheRecortable(k){
+  return (k.startsWith('orders_')
+       || (k.startsWith('invmov_') && !k.startsWith('invmov_pend_'))
+       || k === 'transferencias_local');
+}
+
+function liberarEspacioLocal(){
+  let recortadas = 0;
+  Object.keys(localStorage).filter(esCacheRecortable).forEach(k=>{
+    try{
+      const arr = JSON.parse(localStorage.getItem(k)||'[]');
+      if(!Array.isArray(arr) || arr.length < 20) return;
+      // Se conserva la mitad más reciente (las cachés van de lo nuevo a lo viejo)
+      localStorage.setItem(k, JSON.stringify(arr.slice(0, Math.ceil(arr.length/2))));
+      recortadas++;
+    }catch(e){ try{ localStorage.removeItem(k); recortadas++; }catch(_){} }
+  });
+  return recortadas;
+}
+
+// Guarda en localStorage sin lanzar error: si no cabe, libera espacio y reintenta
+function lsSet(key, valor){
+  try{ localStorage.setItem(key, valor); return true; }
+  catch(e){
+    const lleno = /quota|exceeded/i.test((e && (e.name+' '+e.message)) || '');
+    if(!lleno){ console.warn('localStorage:', e); return false; }
+    const n = liberarEspacioLocal();
+    try{
+      localStorage.setItem(key, valor);
+      if(n) toast('🧹 Almacenamiento local liberado — los datos en la nube están intactos');
+      return true;
+    }catch(e2){
+      console.warn('localStorage sigue lleno tras liberar espacio:', e2);
+      toast('⚠️ Almacenamiento del dispositivo lleno — los datos sí se guardaron en la nube');
+      return false;
+    }
+  }
+}
+
+// Tamaño aproximado de lo almacenado, en KB
+function usoLocalKB(){
+  let total = 0;
+  Object.keys(localStorage).forEach(k=>{ total += (k.length + (localStorage.getItem(k)||'').length); });
+  return Math.round(total/1024);
+}
+
 const QUEUE_KEY = () => 'sync_queue_'+sistema;
 const ORDERS_KEY = () => 'orders_'+sistema;
 
 function queueGet(){ try{return JSON.parse(localStorage.getItem(QUEUE_KEY())||'[]');}catch(e){return[];} }
-function queueAdd(row){ const q=queueGet(); q.push({row,ts:Date.now()}); localStorage.setItem(QUEUE_KEY(),JSON.stringify(q)); }
-function queueClear(){ localStorage.setItem(QUEUE_KEY(),'[]'); }
+function queueAdd(row){ const q=queueGet(); q.push({row,ts:Date.now()}); lsSet(QUEUE_KEY(),JSON.stringify(q)); }
+function queueClear(){ lsSet(QUEUE_KEY(),'[]'); }
 
+// Se guardan los 200 pedidos más recientes: el resto vive en Supabase
 function saveLocalOrders(list){
-  localStorage.setItem(ORDERS_KEY(), JSON.stringify(list));
+  lsSet(ORDERS_KEY(), JSON.stringify((list||[]).slice(0,200)));
 }
 function loadLocalOrders(){
   try{return JSON.parse(localStorage.getItem(ORDERS_KEY())||'[]');}catch(e){return[];}
@@ -1785,7 +1858,7 @@ async function delOrder(f) {
   try {
     if(!OFFLINE) { await sbClient.from('pedidos').delete().eq('folio',f).eq('sistema',sistema); }
     orders = orders.filter(o=>o.folio!==f);
-    if(!OFFLINE) {} else localStorage.setItem('orders_'+sistema,JSON.stringify(orders));
+    if(!OFFLINE) {} else saveLocalOrders(orders);
     renderHist(); toast('Pedido eliminado');
   } catch(e) { toast('Error: '+e.message); }
 }
@@ -2257,8 +2330,8 @@ function imprimirPedido(o) {
 // Subir estos valores en cada despliegue: permiten confirmar
 // de un vistazo si el navegador cargó la versión nueva.
 // ════════════════════════════════════════════════
-const APP_VERSION = '3.3';
-const APP_FECHA   = '2026-09-22';
+const APP_VERSION = '3.4';
+const APP_FECHA   = '2026-09-25';
 
 let invMovs = [];        // movimientos de la bodega seleccionada
 let invEditId = null;    // id del movimiento en edición (null = conteo nuevo/del día)
@@ -2317,10 +2390,10 @@ function fmtFecha(f){
   const [y,m,d] = f.split('-');
   return `${d}-${m}-${y}`;
 }
-function invCacheSave(){ try{ localStorage.setItem(INVMOV_CACHE(), JSON.stringify(invMovs)); }catch(e){} }
+function invCacheSave(){ lsSet(INVMOV_CACHE(), JSON.stringify(invMovs.slice(0,400))); }
 function invCacheLoad(){ try{ return JSON.parse(localStorage.getItem(INVMOV_CACHE())||'[]'); }catch(e){ return []; } }
 function invPendGet(){ try{ return JSON.parse(localStorage.getItem(INVMOV_PEND())||'[]'); }catch(e){ return []; } }
-function invPendSave(q){ try{ localStorage.setItem(INVMOV_PEND(), JSON.stringify(q)); }catch(e){} }
+function invPendSave(q){ lsSet(INVMOV_PEND(), JSON.stringify(q)); }   // nunca se recorta
 function invPendAdd(op){ const q = invPendGet(); q.push(op); invPendSave(q); }
 
 // ── Permisos ──
@@ -2930,14 +3003,14 @@ function invPendAddFor(sistemaId, op){
   const k = 'invmov_pend_'+sistemaId;
   let q = []; try{ q = JSON.parse(localStorage.getItem(k)||'[]'); }catch(e){}
   q.push(op);
-  try{ localStorage.setItem(k, JSON.stringify(q)); }catch(e){}
+  lsSet(k, JSON.stringify(q));
 }
 function invCacheUpsertFor(sistemaId, mov){
   const k = 'invmov_'+sistemaId;
   let c = []; try{ c = JSON.parse(localStorage.getItem(k)||'[]'); }catch(e){}
   const i = c.findIndex(m=>m.id===mov.id);
   if(i>=0) c[i]=mov; else c.unshift(mov);
-  try{ localStorage.setItem(k, JSON.stringify(c)); }catch(e){}
+  lsSet(k, JSON.stringify(c.slice(0,400)));
   if(invSistema===sistemaId){
     const j = invMovs.findIndex(m=>m.id===mov.id);
     if(j>=0) invMovs[j]=mov; else invMovs.unshift(mov);
@@ -2946,7 +3019,7 @@ function invCacheUpsertFor(sistemaId, mov){
 function invCacheRemoveFor(sistemaId, id){
   const k = 'invmov_'+sistemaId;
   let c = []; try{ c = JSON.parse(localStorage.getItem(k)||'[]'); }catch(e){}
-  try{ localStorage.setItem(k, JSON.stringify(c.filter(m=>m.id!==id))); }catch(e){}
+  lsSet(k, JSON.stringify(c.filter(m=>m.id!==id)));
   if(invSistema===sistemaId) invMovs = invMovs.filter(m=>m.id!==id);
 }
 
@@ -3934,7 +4007,7 @@ async function guardarTransferencia(){
     // Actualizar local
     const idx = transferencias.findIndex(t=>t.folio===folio);
     if(idx>=0) transferencias[idx]=row; else transferencias.unshift(row);
-    localStorage.setItem('transferencias_local', JSON.stringify(transferencias.slice(0,200)));
+    lsSet('transferencias_local', JSON.stringify(transferencias.slice(0,150)));
 
     hideLoading();
     toast(editFolio ? '✅ Transferencia actualizada — '+folio : '✅ Transferencia '+folio+' registrada');
@@ -3972,7 +4045,7 @@ async function cargarTransferencias(){
       const {data} = await sbClient.from('transferencias')
         .select('*').order('created_at',{ascending:false}).limit(100);
       transferencias = data||[];
-      localStorage.setItem('transferencias_local', JSON.stringify(transferencias.slice(0,200)));
+      lsSet('transferencias_local', JSON.stringify(transferencias.slice(0,150)));
     } else {
       transferencias = JSON.parse(localStorage.getItem('transferencias_local')||'[]');
     }
@@ -4080,7 +4153,7 @@ async function eliminarTransferencia(folio){
       if(error) throw error;
     }
     transferencias = transferencias.filter(t=>t.folio!==folio);
-    localStorage.setItem('transferencias_local', JSON.stringify(transferencias.slice(0,200)));
+    lsSet('transferencias_local', JSON.stringify(transferencias.slice(0,150)));
     hideLoading();
     renderHistTr();
     toast('🗑️ Transferencia eliminada');
@@ -4095,7 +4168,7 @@ async function cancelarTransferencia(folio){
     }
     const idx = transferencias.findIndex(t=>t.folio===folio);
     if(idx>=0) transferencias[idx].estado='cancelado';
-    localStorage.setItem('transferencias_local', JSON.stringify(transferencias.slice(0,200)));
+    lsSet('transferencias_local', JSON.stringify(transferencias.slice(0,150)));
     renderHistTr();
     toast('Transferencia cancelada');
   } catch(e){ toast('Error: '+e.message); }
@@ -4263,7 +4336,30 @@ function renderDashboard(){
 // ════════════════════════════════════════════════
 // ADMIN
 // ════════════════════════════════════════════════
-function renderAdmin(){renderCatAdmin();renderUsersAdmin();document.getElementById('cat-count').textContent=CATS.reduce((s,c)=>s+c.items.length,0);}
+function mostrarUsoLocal(){
+  const pend = (()=>{
+    let n = 0;
+    Object.keys(localStorage).forEach(k=>{
+      if(k.startsWith('invmov_pend_') || k.startsWith('sync_queue_')){
+        try{ n += (JSON.parse(localStorage.getItem(k)||'[]')).length; }catch(e){}
+      }
+    });
+    return n;
+  })();
+  document.getElementById('ls-uso').innerHTML =
+    `Uso aproximado: <strong>${usoLocalKB()} KB</strong> · ${Object.keys(localStorage).length} claves`
+    + (pend ? ` · ⏳ ${pend} pendiente${pend===1?'':'s'} de sincronizar` : ' · ✅ sin pendientes');
+}
+
+function limpiarCacheLocal(){
+  if(!confirm('¿Liberar la caché local?\n\nSe recortan las copias de pedidos, movimientos y transferencias guardadas en este dispositivo. Nada se pierde: todo está en Supabase y se vuelve a descargar.\n\nLas operaciones pendientes de sincronizar NO se tocan.')) return;
+  const antes = usoLocalKB();
+  const n = liberarEspacioLocal();
+  mostrarUsoLocal();
+  toast(n ? `🧹 ${antes - usoLocalKB()} KB liberados en ${n} caché${n===1?'':'s'}` : 'No había cachés grandes que recortar');
+}
+
+function renderAdmin(){renderCatAdmin();renderUsersAdmin();mostrarUsoLocal();document.getElementById('cat-count').textContent=CATS.reduce((s,c)=>s+c.items.length,0);}
 function renderCatAdmin(){
   const cont=document.getElementById('cat-list');
   cont.innerHTML=CATS.map(cat=>`
@@ -4282,7 +4378,7 @@ function renderCatAdmin(){
 }
 async function saveCatalogToSupabase(){
   const toSave=CATS.map(c=>({id:c.id,label:c.label,items:c.items}));
-  if(OFFLINE){localStorage.setItem('catalog_'+sistema,JSON.stringify(toSave));return;}
+  if(OFFLINE){lsSet('catalog_'+sistema,JSON.stringify(toSave));return;}
   await sbClient.from('catalogo').upsert({sistema,cats:toSave,updated_at:new Date().toISOString()},{onConflict:'sistema'});
 }
 function abrirModalProd(catId,idx){
@@ -4361,7 +4457,7 @@ async function guardarNuevoUsuario(){
   if(!p||p.length<4){toast('PIN mínimo 4 dígitos');return;}
   if(OFFLINE){
     const users=await loadUsers();users.push({name:n,role:r,pin:p,activo:true});
-    localStorage.setItem('users_'+sistema,JSON.stringify(users));
+    lsSet('users_'+sistema,JSON.stringify(users));
   } else {
     await sbClient.from('usuarios').insert({sistema,nombre:n,name:n,rol:r,role:r,pin:p,activo:true});
   }
@@ -4372,7 +4468,7 @@ async function cambiarPin(nombre){
   const p=prompt('Nuevo PIN (mín. 4 caracteres):');if(!p||p.length<4){toast('PIN inválido');return;}
   if(OFFLINE){
     const users=await loadUsers();const u=users.find(x=>(x.name||x.nombre)===nombre);if(u)u.pin=p;
-    localStorage.setItem('users_'+sistema,JSON.stringify(users));
+    lsSet('users_'+sistema,JSON.stringify(users));
   } else {
     await sbClient.from('usuarios').update({pin:p}).eq('sistema',sistema).eq('nombre',nombre);
   }
@@ -4382,7 +4478,7 @@ async function eliminarUsuario(nombre){
   if(!confirm('¿Eliminar usuario "'+nombre+'"?'))return;
   if(OFFLINE){
     const users=(await loadUsers()).filter(u=>(u.name||u.nombre)!==nombre);
-    localStorage.setItem('users_'+sistema,JSON.stringify(users));
+    lsSet('users_'+sistema,JSON.stringify(users));
   } else {
     await sbClient.from('usuarios').update({activo:false}).eq('sistema',sistema).eq('nombre',nombre);
   }
